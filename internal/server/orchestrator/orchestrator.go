@@ -591,7 +591,14 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 			cmdArgs[pluginspec.RootFSDeviceKey] = "vda"
 		}
 		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
-			cmdArgs[pluginspec.RootFSFSTypeKey] = "ext4"
+			// Detect filesystem type from file extension
+			cmdArgs[pluginspec.RootFSFSTypeKey] = detectRootFSType(spec.RootFS)
+		}
+		// For squashfs, add overlay_size parameter for writable layer
+		if cmdArgs[pluginspec.RootFSFSTypeKey] == "squashfs" {
+			if _, ok := cmdArgs["overlay_size"]; !ok {
+				cmdArgs["overlay_size"] = "1G" // default 1GB tmpfs for writes
+			}
 		}
 	}
 
@@ -1116,7 +1123,14 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 			cmdArgs[pluginspec.RootFSDeviceKey] = "vda"
 		}
 		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
-			cmdArgs[pluginspec.RootFSFSTypeKey] = "ext4"
+			// Detect filesystem type from file extension
+			cmdArgs[pluginspec.RootFSFSTypeKey] = detectRootFSType(spec.RootFS)
+		}
+		// For squashfs, add overlay_size parameter for writable layer
+		if cmdArgs[pluginspec.RootFSFSTypeKey] == "squashfs" {
+			if _, ok := cmdArgs["overlay_size"]; !ok {
+				cmdArgs["overlay_size"] = "1G" // default 1GB tmpfs for writes
+			}
 		}
 	}
 
@@ -2067,6 +2081,29 @@ func formatNetmask(mask net.IPMask) string {
 		parts[i] = fmt.Sprintf("%d", int(b))
 	}
 	return strings.Join(parts, ".")
+}
+
+// detectRootFSType detects the filesystem type from the rootfs file path.
+// Looks at file extension to determine type: .squashfs, .img (ext4), .xfs, .btrfs
+func detectRootFSType(rootfsPath string) string {
+	if rootfsPath == "" {
+		return "ext4" // default fallback
+	}
+	
+	// Detect from file extension
+	switch {
+	case strings.HasSuffix(rootfsPath, ".squashfs"):
+		return "squashfs"
+	case strings.HasSuffix(rootfsPath, ".xfs"):
+		return "xfs"
+	case strings.HasSuffix(rootfsPath, ".btrfs"):
+		return "btrfs"
+	case strings.HasSuffix(rootfsPath, ".img"):
+		return "ext4"
+	default:
+		// For URLs or paths without extension, default to ext4 for backward compatibility
+		return "ext4"
+	}
 }
 
 func (e *engine) launchContext() context.Context {
