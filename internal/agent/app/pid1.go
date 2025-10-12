@@ -76,6 +76,15 @@ func (a *App) bootstrapPID1Inner() error {
 			device = "/dev/" + device
 		}
 		fsType := resolveRootfsFSType()
+		
+		// For squashfs: C init already mounted it with overlayfs and did chroot.
+		// We're already inside the rootfs, so skip mounting and go directly to stage2.
+		if fsType == "squashfs" {
+			a.log.Printf("pid1 bootstrap: squashfs detected, already in rootfs (C init did overlayfs+chroot)")
+			return a.enterStage2(false) // false = we're in rootfs, not initramfs
+		}
+		
+		// Legacy ext4/xfs/btrfs: mount the rootfs and pivot
 		if err := waitForDevice(device, 10*time.Second); err != nil {
 			return err
 		}
@@ -101,6 +110,15 @@ func (a *App) bootstrapPID1Inner() error {
 			device = "/dev/" + device
 		}
 		fsType := resolveRootfsFSType()
+		
+		// For squashfs: C init already mounted it with overlayfs and did chroot.
+		// We're already inside the rootfs, so skip mounting and go directly to stage2.
+		if fsType == "squashfs" {
+			a.log.Printf("pid1 bootstrap: squashfs detected, already in rootfs (C init did overlayfs+chroot)")
+			return a.enterStage2(false) // false = we're in rootfs, not initramfs
+		}
+		
+		// Legacy ext4/xfs/btrfs: mount the rootfs and pivot
 		if err := waitForDevice(device, 10*time.Second); err != nil {
 			return err
 		}
@@ -197,7 +215,8 @@ func resolveRootfsFSType() string {
 	if value := cmdlineValue(pluginspec.RootFSFSTypeKey); value != "" {
 		return value
 	}
-	return "ext4"
+	// Default to squashfs (new standard), fallback to ext4 for legacy
+	return "squashfs"
 }
 
 func resolveBootMode() string {
