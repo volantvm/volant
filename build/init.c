@@ -101,14 +101,25 @@ static const char* get_cmdline_param(const char *key) {
     return value;
 }
 
-// Try to mount rootfs (squashfs with overlayfs, or legacy ext4/xfs/btrfs)
+// Try to mount rootfs based on standard Linux kernel parameters (root= and rootfstype=)
+// Returns 1 if mounted successfully, 0 if no rootfs specified or failed
 static int try_mount_rootfs(void) {
-    const char *rootfs_fstype = get_cmdline_param("rootfs_fstype");
-    if (!rootfs_fstype) rootfs_fstype = "ext4"; // default
+    // Read standard Linux kernel parameters (not volant-specific!)
+    const char *root_device = get_cmdline_param("root");
+    const char *rootfs_fstype = get_cmdline_param("rootfstype");
     
-    const char *root_device = "/dev/vda";
+    // If no root= parameter, stay in initramfs (let userspace init handle it)
+    if (!root_device || strlen(root_device) == 0) {
+        printf("C INIT: No root= parameter, staying in initramfs\n");
+        return 0;
+    }
     
-    printf("C INIT: rootfs_fstype=%s device=%s\n", rootfs_fstype, root_device);
+    // Default filesystem type if not specified
+    if (!rootfs_fstype || strlen(rootfs_fstype) == 0) {
+        rootfs_fstype = "ext4";
+    }
+    
+    printf("C INIT: Mounting root=%s rootfstype=%s\n", root_device, rootfs_fstype);
     
     // Wait for device (up to 5 seconds)
     for (int i = 0; i < 50; i++) {
@@ -121,7 +132,7 @@ static int try_mount_rootfs(void) {
     
     struct stat st;
     if (stat(root_device, &st) != 0 || !S_ISBLK(st.st_mode)) {
-        printf("C INIT: No rootfs device found, staying in initramfs\n");
+        fprintf(stderr, "C INIT: Device %s not found, staying in initramfs\n", root_device);
         return 0;
     }
     
@@ -139,13 +150,12 @@ static int try_mount_rootfs(void) {
             return 0;
         }
         
-        // Create upper and work dirs for overlayfs
-        mkdir("/upper", 0755);
-        mkdir("/work", 0755);
-        
         // Get overlay size from cmdline (default 1G)
         const char *overlay_size = get_cmdline_param("overlay_size");
         if (!overlay_size) overlay_size = "1G";
+        
+        // Create upper directory and mount tmpfs to it
+        mkdir("/upper", 0755);
         
         char tmpfs_opts[256];
         snprintf(tmpfs_opts, sizeof(tmpfs_opts), "size=%s", overlay_size);
@@ -156,9 +166,13 @@ static int try_mount_rootfs(void) {
             return 0;
         }
         
+        // CRITICAL: Create work directory INSIDE the tmpfs mount
+        // overlayfs requires workdir to be on same filesystem as upperdir
+        mkdir("/upper/work", 0755);
+        
         // Mount overlayfs
         if (mount("overlay", "/newroot", "overlay", 0, 
-                  "lowerdir=/lower,upperdir=/upper,workdir=/work")) {
+                  "lowerdir=/lower,upperdir=/upper,workdir=/upper/work")) {
             fprintf(stderr, "C INIT: Failed to mount overlayfs: %s\n", strerror(errno));
             umount("/upper");
             umount("/lower");
@@ -198,7 +212,8 @@ int main(int argc, char *argv[]) {
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
     mkdir("/dev", 0755);
-    mkdir("/bin", 0755); // For kestrel
+    mkdir("/bin", 0755);
+    mkdir("/sbin", 0755);
 
     // Set up the essential filesystems
     mount_filesystems();
@@ -208,22 +223,40 @@ int main(int argc, char *argv[]) {
 
     printf("C INIT: Basic environment is up.\n");
     
-    // Try to mount rootfs if available (squashfs, ext4, xfs, btrfs)
-    // If successful, we'll chroot into it
+    // Try to mount rootfs if kernel cmdline specifies root= and rootfstype=
+    // This is standard Linux behavior - if root= exists, mount it
     int mounted_rootfs = try_mount_rootfs();
     if (mounted_rootfs) {
-        printf("C INIT: Pivoted to rootfs. Handing off to kestrel...\n");
+        printf("C INIT: Rootfs mounted and pivoted.\n");
     } else {
-        printf("C INIT: Staying in initramfs. Handing off to kestrel...\n");
+        printf("C INIT: No rootfs specified, staying in initramfs.\n");
     }
 
-    // Hand over control to our real Go init program.
-    // This will now become the new PID 1.
-    char *const kestrel_argv[] = {"/bin/kestrel", NULL};
-    execv("/bin/kestrel", kestrel_argv);
+    // Standard Linux init search order (try multiple possible init locations)
+    // This makes C init work with ANY userspace init, not just kestrel
+    printf("C INIT: Searching for init...\n");
+    
+    const char *init_paths[] = {
+        "/sbin/init",       // Standard systemd/sysvinit location
+        "/init",            // Custom init in rootfs root
+        "/bin/init",        // Alternative location
+        "/bin/kestrel",     // Volant's Go init
+        NULL
+    };
+    
+    for (int i = 0; init_paths[i] != NULL; i++) {
+        struct stat st;
+        if (stat(init_paths[i], &st) == 0 && (st.st_mode & S_IXUSR)) {
+            printf("C INIT: Found init at %s, executing...\n", init_paths[i]);
+            char *const init_argv[] = {(char *)init_paths[i], NULL};
+            execv(init_paths[i], init_argv);
+            // If execv returns, it failed - try next
+            fprintf(stderr, "C INIT: Failed to exec %s: %s\n", init_paths[i], strerror(errno));
+        }
+    }
 
-    // If execv returns, it failed. This is a catastrophe.
-    panic("execv(/bin/kestrel)");
+    // No init found anywhere - this is a catastrophe
+    panic("No init found in /sbin/init, /init, /bin/init, or /bin/kestrel");
 
     return 1; // Unreachable
 }

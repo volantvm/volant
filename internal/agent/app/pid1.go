@@ -34,6 +34,36 @@ const (
 
 var bootstrapOnce sync.Once
 
+// isAlreadyInRootfs checks if we're already in a mounted rootfs (C init might have done it).
+// This makes kestrel defensive and compatible with any kernel init.
+func isAlreadyInRootfs() bool {
+	// Check if a block device is mounted on / (means we're in rootfs, not initramfs)
+	mounts, err := os.ReadFile("/proc/mounts")
+	if err != nil {
+		return false
+	}
+	
+	// Look for lines like: "/dev/vda / ext4 ..." or "/dev/vda / squashfs ..."
+	// If root is mounted from a block device, we're in rootfs
+	for _, line := range strings.Split(string(mounts), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[1] == "/" {
+			device := fields[0]
+			// Block devices start with /dev/ (not tmpfs, proc, sysfs, etc.)
+			if strings.HasPrefix(device, "/dev/") && 
+			   !strings.HasPrefix(device, "/dev/pts") &&
+			   !strings.HasPrefix(device, "/dev/shm") {
+				return true
+			}
+			// Also check for overlay (squashfs+overlayfs case)
+			if device == "overlay" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (a *App) bootstrapPID1() error {
 	// If we are not PID 1, we are not the init process. Do nothing.
 	if os.Getpid() != 1 {
@@ -60,14 +90,22 @@ func (a *App) bootstrapPID1Inner() error {
 	if err := mountInitial(); err != nil {
 		return fmt.Errorf("mount initial filesystems: %w", err)
 	}
-	// Determine boot mode: auto (default), initramfs, or rootfs
+	
+	// DEFENSE: Check if C init (or another init) already mounted rootfs for us.
+	// This makes kestrel compatible with any kernel init.
+	if isAlreadyInRootfs() {
+		a.log.Printf("pid1 bootstrap: already in mounted rootfs (kernel init handled it)")
+		return a.enterStage2(false) // false = we're in rootfs
+	}
+	
+	// We're still in initramfs. Determine boot mode: auto (default), initramfs, or rootfs
 	mode := resolveBootMode()
 	switch mode {
 	case "initramfs":
 		a.log.Printf("pid1 bootstrap: volant.boot=initramfs, staying on initramfs")
 		return a.enterStage2(true)
 	case "rootfs":
-		a.log.Printf("pid1 bootstrap: volant.boot=rootfs, pivoting to rootfs")
+		a.log.Printf("pid1 bootstrap: volant.boot=rootfs, mounting rootfs ourselves")
 		device := resolveRootfsDevice()
 		if device == "" {
 			return fmt.Errorf("volant.boot=rootfs but no rootfs device detected")
@@ -77,19 +115,21 @@ func (a *App) bootstrapPID1Inner() error {
 		}
 		fsType := resolveRootfsFSType()
 		
-		// For squashfs: C init already mounted it with overlayfs and did chroot.
-		// We're already inside the rootfs, so skip mounting and go directly to stage2.
-		if fsType == "squashfs" {
-			a.log.Printf("pid1 bootstrap: squashfs detected, already in rootfs (C init did overlayfs+chroot)")
-			return a.enterStage2(false) // false = we're in rootfs, not initramfs
-		}
-		
-		// Legacy ext4/xfs/btrfs: mount the rootfs and pivot
+		// Mount the rootfs (ext4, xfs, btrfs, or squashfs)
 		if err := waitForDevice(device, 10*time.Second); err != nil {
 			return err
 		}
-		if err := mountRootfs(device, fsType); err != nil {
-			return err
+		
+		// For squashfs, we need to set up overlayfs in Go
+		if fsType == "squashfs" {
+			if err := mountSquashfsWithOverlay(device); err != nil {
+				return fmt.Errorf("mount squashfs with overlay: %w", err)
+			}
+		} else {
+			// ext4/xfs/btrfs direct mount
+			if err := mountRootfs(device, fsType); err != nil {
+				return err
+			}
 		}
 		if err := copySelfToRoot(); err != nil {
 			return fmt.Errorf("pid1 bootstrap error: copy self failed: %w", err)
@@ -111,19 +151,22 @@ func (a *App) bootstrapPID1Inner() error {
 		}
 		fsType := resolveRootfsFSType()
 		
-		// For squashfs: C init already mounted it with overlayfs and did chroot.
-		// We're already inside the rootfs, so skip mounting and go directly to stage2.
-		if fsType == "squashfs" {
-			a.log.Printf("pid1 bootstrap: squashfs detected, already in rootfs (C init did overlayfs+chroot)")
-			return a.enterStage2(false) // false = we're in rootfs, not initramfs
-		}
-		
-		// Legacy ext4/xfs/btrfs: mount the rootfs and pivot
+		// Mount the rootfs (ext4, xfs, btrfs, or squashfs if C init didn't do it)
+		a.log.Printf("pid1 bootstrap: volant.boot=auto, mounting rootfs device=%s fstype=%s", device, fsType)
 		if err := waitForDevice(device, 10*time.Second); err != nil {
 			return err
 		}
-		if err := mountRootfs(device, fsType); err != nil {
-			return err
+		
+		// For squashfs, we need to set up overlayfs in Go
+		if fsType == "squashfs" {
+			if err := mountSquashfsWithOverlay(device); err != nil {
+				return fmt.Errorf("mount squashfs with overlay: %w", err)
+			}
+		} else {
+			// ext4/xfs/btrfs direct mount
+			if err := mountRootfs(device, fsType); err != nil {
+				return err
+			}
 		}
 		if err := copySelfToRoot(); err != nil {
 			return fmt.Errorf("pid1 bootstrap error: copy self failed: %w", err)
@@ -267,6 +310,60 @@ func mountRootfs(device, fsType string) error {
 	if err := unix.Mount(device, rootMountPoint, fsType, unix.MS_RELATIME, ""); err != nil {
 		return fmt.Errorf("mount rootfs %s on %s: %w", device, rootMountPoint, err)
 	}
+	return nil
+}
+
+// mountSquashfsWithOverlay mounts a squashfs device with overlayfs on top for writes.
+// This provides Docker-like layered filesystem support.
+func mountSquashfsWithOverlay(device string) error {
+	// Get overlay size from kernel cmdline (default 1G)
+	overlaySize := cmdlineValue("overlay_size")
+	if overlaySize == "" {
+		overlaySize = "1G"
+	}
+	
+	// Create mount points
+	lowerDir := "/mnt/squashfs-lower"
+	upperDir := "/mnt/squashfs-upper"
+	
+	if err := os.MkdirAll(lowerDir, 0o755); err != nil {
+		return fmt.Errorf("create lower dir: %w", err)
+	}
+	if err := os.MkdirAll(upperDir, 0o755); err != nil {
+		return fmt.Errorf("create upper dir: %w", err)
+	}
+	if err := os.MkdirAll(rootMountPoint, 0o755); err != nil {
+		return fmt.Errorf("create root mount point: %w", err)
+	}
+	
+	// Mount squashfs as lower layer (read-only)
+	if err := unix.Mount(device, lowerDir, "squashfs", unix.MS_RDONLY, ""); err != nil {
+		return fmt.Errorf("mount squashfs: %w", err)
+	}
+	
+	// Mount tmpfs for upper layer (writable)
+	tmpfsOpts := "size=" + overlaySize
+	if err := unix.Mount("tmpfs", upperDir, "tmpfs", 0, tmpfsOpts); err != nil {
+		unix.Unmount(lowerDir, 0)
+		return fmt.Errorf("mount tmpfs upper: %w", err)
+	}
+	
+	// Create work directory inside tmpfs (overlayfs requirement)
+	workDir := filepath.Join(upperDir, "work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		unix.Unmount(upperDir, 0)
+		unix.Unmount(lowerDir, 0)
+		return fmt.Errorf("create work dir: %w", err)
+	}
+	
+	// Mount overlayfs combining lower and upper
+	overlayOpts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+	if err := unix.Mount("overlay", rootMountPoint, "overlay", 0, overlayOpts); err != nil {
+		unix.Unmount(upperDir, 0)
+		unix.Unmount(lowerDir, 0)
+		return fmt.Errorf("mount overlayfs: %w", err)
+	}
+	
 	return nil
 }
 
