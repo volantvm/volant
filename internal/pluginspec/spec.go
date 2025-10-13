@@ -104,8 +104,12 @@ type CloudInitDoc struct {
 }
 
 var allowedDiskFormats = map[string]struct{}{
-	"raw":   {},
-	"qcow2": {},
+	"raw":      {},
+	"qcow2":    {},
+	"squashfs": {}, // Compressed read-only filesystem with overlayfs support
+	"ext4":     {},
+	"xfs":      {},
+	"btrfs":    {},
 }
 
 func normalizeFormat(value string) string {
@@ -303,7 +307,21 @@ func (m *Manifest) Normalize() {
 	m.RootFS.Checksum = strings.TrimSpace(m.RootFS.Checksum)
 	m.RootFS.Format = normalizeFormat(m.RootFS.Format)
 	if m.RootFS.Format == "" {
-		m.RootFS.Format = "raw"
+		// Auto-detect format from file extension
+		switch {
+		case strings.HasSuffix(m.RootFS.URL, ".squashfs"):
+			m.RootFS.Format = "squashfs"
+		case strings.HasSuffix(m.RootFS.URL, ".qcow2"):
+			m.RootFS.Format = "qcow2"
+		case strings.HasSuffix(m.RootFS.URL, ".xfs"):
+			m.RootFS.Format = "xfs"
+		case strings.HasSuffix(m.RootFS.URL, ".btrfs"):
+			m.RootFS.Format = "btrfs"
+		case strings.HasSuffix(m.RootFS.URL, ".ext4"):
+			m.RootFS.Format = "ext4"
+		default:
+			m.RootFS.Format = "raw" // Default for .img and unknown
+		}
 	}
 	m.Initramfs.URL = strings.TrimSpace(m.Initramfs.URL)
 	m.Initramfs.Checksum = strings.TrimSpace(m.Initramfs.Checksum)

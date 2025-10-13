@@ -587,15 +587,28 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	spec.KernelOverride = strings.TrimSpace(configToStore.KernelOverride)
 	// If RootFS is set, ensure default device/fstype args unless already supplied by the runtime
 	if spec.RootFS != "" {
+		rootDevice := "vda"
 		if _, ok := cmdArgs[pluginspec.RootFSDeviceKey]; !ok {
-			cmdArgs[pluginspec.RootFSDeviceKey] = "vda"
+			cmdArgs[pluginspec.RootFSDeviceKey] = rootDevice
 		}
+		
+		rootFSType := detectRootFSType(spec.RootFS)
 		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
 			// Detect filesystem type from file extension
-			cmdArgs[pluginspec.RootFSFSTypeKey] = detectRootFSType(spec.RootFS)
+			cmdArgs[pluginspec.RootFSFSTypeKey] = rootFSType
 		}
+		
+		// CRITICAL: Add standard kernel boot parameters (not just volant.* parameters)
+		// The kernel needs root= and rootfstype= to mount the rootfs
+		if _, ok := cmdArgs["root"]; !ok {
+			cmdArgs["root"] = "/dev/" + rootDevice
+		}
+		if _, ok := cmdArgs["rootfstype"]; !ok {
+			cmdArgs["rootfstype"] = rootFSType
+		}
+		
 		// For squashfs, add overlay_size parameter for writable layer
-		if cmdArgs[pluginspec.RootFSFSTypeKey] == "squashfs" {
+		if rootFSType == "squashfs" {
 			if _, ok := cmdArgs["overlay_size"]; !ok {
 				cmdArgs["overlay_size"] = "1G" // default 1GB tmpfs for writes
 			}
@@ -1119,15 +1132,28 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 	}
 	spec.KernelOverride = strings.TrimSpace(cfg.KernelOverride)
 	if spec.RootFS != "" {
+		rootDevice := "vda"
 		if _, ok := cmdArgs[pluginspec.RootFSDeviceKey]; !ok {
-			cmdArgs[pluginspec.RootFSDeviceKey] = "vda"
+			cmdArgs[pluginspec.RootFSDeviceKey] = rootDevice
 		}
+		
+		rootFSType := detectRootFSType(spec.RootFS)
 		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
 			// Detect filesystem type from file extension
-			cmdArgs[pluginspec.RootFSFSTypeKey] = detectRootFSType(spec.RootFS)
+			cmdArgs[pluginspec.RootFSFSTypeKey] = rootFSType
 		}
+		
+		// CRITICAL: Add standard kernel boot parameters (not just volant.* parameters)
+		// The kernel needs root= and rootfstype= to mount the rootfs
+		if _, ok := cmdArgs["root"]; !ok {
+			cmdArgs["root"] = "/dev/" + rootDevice
+		}
+		if _, ok := cmdArgs["rootfstype"]; !ok {
+			cmdArgs["rootfstype"] = rootFSType
+		}
+		
 		// For squashfs, add overlay_size parameter for writable layer
-		if cmdArgs[pluginspec.RootFSFSTypeKey] == "squashfs" {
+		if rootFSType == "squashfs" {
 			if _, ok := cmdArgs["overlay_size"]; !ok {
 				cmdArgs["overlay_size"] = "1G" // default 1GB tmpfs for writes
 			}
