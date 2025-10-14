@@ -1,4 +1,6 @@
 .cache
 build/artifacts
+build/kestrel
+build/volant-initramfs.cpio.gz
 .DS_STORE
 bin

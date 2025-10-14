@@ -1,14 +1,14 @@
-#include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/in.h>
-#include <linux/ip.h>
-#include <linux/pkt_cls.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <stddef.h>
-
+#include "vmlinux.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
+
+#ifndef TC_ACT_OK
+#define TC_ACT_OK 0
+#endif
+
+#ifndef ETH_P_IP
+#define ETH_P_IP 0x0800
+#endif
 
 struct portmap_key {
 	__u8 proto;

@@ -51,8 +51,14 @@ jobs:
 
       - name: Build Drift eBPF Object
         run: |
+          sudo apt-get install -y linux-headers-$(uname -r) libbpf-dev
           mkdir -p internal/drift/bpf/bin
-          clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c internal/drift/bpf/drift_l4.c -o internal/drift/bpf/bin/drift_l4.bpf.o
+          # Generate vmlinux.h with all kernel definitions
+          bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/drift/bpf/vmlinux.h
+          clang -O2 -g -target bpf -D__TARGET_ARCH_x86 \
+            -I internal/drift/bpf \
+            -I/usr/lib/x86_64-linux-gnu \
+            -c internal/drift/bpf/drift_l4.c -o internal/drift/bpf/bin/drift_l4.bpf.o
           llvm-strip -g internal/drift/bpf/bin/drift_l4.bpf.o
           cp internal/drift/bpf/bin/drift_l4.bpf.o bin/drift_l4.bpf.o
 
