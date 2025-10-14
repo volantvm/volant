@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/volantvm/volant/internal/pluginspec"
 	"github.com/volantvm/volant/internal/server/orchestrator/runtime"
 )
 
@@ -95,6 +96,7 @@ func (l *Launcher) Launch(ctx context.Context, spec runtime.LaunchSpec) (runtime
 	}
 
 	var rootfsPath string
+	rootfsReadOnly := false
 	if spec.RootFS != "" {
 		rootfsPath = filepath.Join(l.RuntimeDir, fmt.Sprintf("%s.rootfs", spec.Name))
 		if err := streamFile(ctx, spec.RootFS, rootfsPath, spec.RootFSChecksum); err != nil {
@@ -104,6 +106,27 @@ func (l *Launcher) Launch(ctx context.Context, spec runtime.LaunchSpec) (runtime
 			}
 			return nil, fmt.Errorf("cloudhypervisor: fetch rootfs: %w", err)
 		}
+
+		rootfsType := strings.ToLower(strings.TrimSpace(spec.Args["rootfstype"]))
+		if rootfsType == "" {
+			if v, ok := spec.Args[pluginspec.RootFSFSTypeKey]; ok {
+				rootfsType = strings.ToLower(strings.TrimSpace(v))
+			}
+		}
+		if rootfsType == "" {
+			lowerRoot := strings.ToLower(spec.RootFS)
+			switch {
+			case strings.HasSuffix(lowerRoot, ".squashfs"):
+				rootfsType = "squashfs"
+			case strings.HasSuffix(lowerRoot, ".xfs"):
+				rootfsType = "xfs"
+			case strings.HasSuffix(lowerRoot, ".btrfs"):
+				rootfsType = "btrfs"
+			case strings.HasSuffix(lowerRoot, ".img"):
+				rootfsType = "ext4"
+			}
+		}
+		rootfsReadOnly = rootfsType == "squashfs"
 	}
 
 	logPath := filepath.Join(l.LogDir, fmt.Sprintf("%s.log", spec.Name))
@@ -178,7 +201,11 @@ func (l *Launcher) Launch(ctx context.Context, spec runtime.LaunchSpec) (runtime
 		args = append(args, "--initramfs", initramfsCopy)
 	}
 	if rootfsPath != "" {
-		args = append(args, "--disk", fmt.Sprintf("path=%s,readonly=false", rootfsPath))
+		rootReadonly := "false"
+		if rootfsReadOnly {
+			rootReadonly = "true"
+		}
+		args = append(args, "--disk", fmt.Sprintf("path=%s,readonly=%s", rootfsPath, rootReadonly))
 	}
 	for _, disk := range spec.Disks {
 		path := strings.TrimSpace(disk.Path)
