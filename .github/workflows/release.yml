@@ -55,6 +55,7 @@ jobs:
           mkdir -p internal/drift/bpf/bin
           clang -O2 -g -target bpf -D__TARGET_ARCH_x86 \
             -I/usr/src/linux-headers-$(uname -r)/arch/x86/include/generated/uapi \
+            -I/usr/src/linux-headers-$(uname -r)/arch/x86/include/uapi \
             -I/usr/src/linux-headers-$(uname -r)/arch/x86/include/generated \
             -I/usr/src/linux-headers-$(uname -r)/include/uapi \
             -I/usr/src/linux-headers-$(uname -r)/include/generated/uapi \
