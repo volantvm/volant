@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/reboot.h>
 #include <sys/sysmacros.h>
+#include <limits.h>
 
 // A proper shutdown function
 __attribute__((noreturn)) static void poweroff(void) {
@@ -67,16 +68,22 @@ static void mount_filesystems(void) {
         panic("mount(/run)");
 }
 
-// Helper to read kernel cmdline parameter
-static const char* get_cmdline_param(const char *key) {
-    static char value[256];
+// Helper to read a kernel cmdline parameter into caller-provided buffer.
+// Returns 1 when present, 0 otherwise.
+static int get_cmdline_param(const char *key, char *value, size_t value_len) {
+    if (!value || value_len == 0) {
+        return 0;
+    }
+    value[0] = '\0';
+
     FILE *f = fopen("/proc/cmdline", "r");
-    if (!f) return NULL;
+    if (!f)
+        return 0;
     
     char line[4096];
     if (!fgets(line, sizeof(line), f)) {
         fclose(f);
-        return NULL;
+        return 0;
     }
     fclose(f);
     
@@ -84,12 +91,13 @@ static const char* get_cmdline_param(const char *key) {
     char search[256];
     snprintf(search, sizeof(search), "%s=", key);
     char *found = strstr(line, search);
-    if (!found) return NULL;
+    if (!found)
+        return 0;
     
     found += strlen(search);
     char *end = strchr(found, ' ');
     size_t len = end ? (size_t)(end - found) : strlen(found);
-    if (len >= sizeof(value)) len = sizeof(value) - 1;
+    if (len >= value_len) len = value_len - 1;
     
     strncpy(value, found, len);
     value[len] = '\0';
@@ -98,42 +106,55 @@ static const char* get_cmdline_param(const char *key) {
     char *nl = strchr(value, '\n');
     if (nl) *nl = '\0';
     
-    return value;
+    return 1;
 }
 
 // Try to mount rootfs based on standard Linux kernel parameters (root= and rootfstype=)
 // Returns 1 if mounted successfully, 0 if no rootfs specified or failed
 static int try_mount_rootfs(void) {
     // Read standard Linux kernel parameters (not volant-specific!)
-    const char *root_device = get_cmdline_param("root");
-    const char *rootfs_fstype = get_cmdline_param("rootfstype");
-    
-    // If no root= parameter, stay in initramfs (let userspace init handle it)
-    if (!root_device || strlen(root_device) == 0) {
+    char root_device_raw[256];
+    if (!get_cmdline_param("root", root_device_raw, sizeof(root_device_raw)) ||
+        strlen(root_device_raw) == 0) {
         printf("C INIT: No root= parameter, staying in initramfs\n");
         return 0;
     }
     
-    // Default filesystem type if not specified
-    if (!rootfs_fstype || strlen(rootfs_fstype) == 0) {
-        rootfs_fstype = "ext4";
+    char rootfs_fstype[64];
+    if (!get_cmdline_param("rootfstype", rootfs_fstype, sizeof(rootfs_fstype)) ||
+        strlen(rootfs_fstype) == 0) {
+        strncpy(rootfs_fstype, "ext4", sizeof(rootfs_fstype) - 1);
+        rootfs_fstype[sizeof(rootfs_fstype) - 1] = '\0';
     }
     
+    char normalized_device[PATH_MAX];
+    const char *root_device = root_device_raw;
+    if (strncmp(root_device_raw, "/dev/", 5) != 0 &&
+        strchr(root_device_raw, '=') == NULL &&
+        strchr(root_device_raw, '/') == NULL) {
+        snprintf(normalized_device, sizeof(normalized_device), "/dev/%s", root_device_raw);
+        root_device = normalized_device;
+    }
+
     printf("C INIT: Mounting root=%s rootfstype=%s\n", root_device, rootfs_fstype);
     
-    // Wait for device (up to 5 seconds)
-    for (int i = 0; i < 50; i++) {
-        struct stat st;
-        if (stat(root_device, &st) == 0 && S_ISBLK(st.st_mode)) {
-            break;
+    // Wait for device (up to 5 seconds) when the root looks like a block device path.
+    if (strncmp(root_device, "/dev/", 5) == 0) {
+        for (int i = 0; i < 50; i++) {
+            struct stat st;
+            if (stat(root_device, &st) == 0 && S_ISBLK(st.st_mode)) {
+                break;
+            }
+            usleep(100000); // 100ms
         }
-        usleep(100000); // 100ms
     }
     
-    struct stat st;
-    if (stat(root_device, &st) != 0 || !S_ISBLK(st.st_mode)) {
-        fprintf(stderr, "C INIT: Device %s not found, staying in initramfs\n", root_device);
-        return 0;
+    if (strncmp(root_device, "/dev/", 5) == 0) {
+        struct stat st;
+        if (stat(root_device, &st) != 0 || !S_ISBLK(st.st_mode)) {
+            fprintf(stderr, "C INIT: Device %s not found, staying in initramfs\n", root_device);
+            return 0;
+        }
     }
     
     mkdir("/newroot", 0755);
@@ -151,8 +172,12 @@ static int try_mount_rootfs(void) {
         }
         
         // Get overlay size from cmdline (default 1G)
-        const char *overlay_size = get_cmdline_param("overlay_size");
-        if (!overlay_size) overlay_size = "1G";
+        char overlay_size[64];
+        if (!get_cmdline_param("overlay_size", overlay_size, sizeof(overlay_size)) ||
+            strlen(overlay_size) == 0) {
+            strncpy(overlay_size, "1G", sizeof(overlay_size) - 1);
+            overlay_size[sizeof(overlay_size) - 1] = '\0';
+        }
         
         // Create upper directory and mount tmpfs to it
         mkdir("/upper", 0755);
