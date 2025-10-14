@@ -24,7 +24,9 @@ BPF_ARCH_DEF ?=
 endif
 
 BPF_CFLAGS ?= -O2 -g -target bpf $(BPF_ARCH_DEF)
-BPF_CINCLUDES ?=
+LIBBPF_SRC_DIR := /root/volant/libbpf/src
+BPF_CINCLUDES ?= -I/usr/include/bpf -I$(LIBBPF_SRC_DIR)
+
 
 .PHONY: help
 help: ## Show available make targets
