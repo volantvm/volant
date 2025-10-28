@@ -10,6 +10,8 @@ UNAME_M := $(shell uname -m)
 
 BPF_SRC := internal/drift/bpf/drift_l4.c
 BPF_OBJ := internal/drift/bpf/bin/drift_l4.bpf.o
+BPF_DIR := $(patsubst %/,%,$(dir $(BPF_SRC)))
+VMLINUX_H := $(BPF_DIR)/vmlinux.h
 
 ifeq ($(UNAME_M),x86_64)
 BPF_ARCH_DEF ?= -D__TARGET_ARCH_x86
@@ -25,7 +27,10 @@ endif
 
 BPF_CFLAGS ?= -O2 -g -target bpf $(BPF_ARCH_DEF)
 LIBBPF_SRC_DIR := /root/volant/libbpf/src
+BTF_SOURCE ?= /sys/kernel/btf/vmlinux
+BPFTOOL ?= bpftool
 BPF_CINCLUDES ?= -I/usr/include/bpf -I$(LIBBPF_SRC_DIR)
+BPF_CINCLUDES += -I$(BPF_DIR)
 
 
 .PHONY: help
@@ -38,11 +43,28 @@ build: build-server build-agent build-cli build-drift ## Build all core binaries
 .PHONY: build-drift-bpf
 build-drift-bpf: ## Build the Drift eBPF object (Linux only)
 ifeq ($(UNAME_S),Linux)
+build-drift-bpf: $(VMLINUX_H)
 	mkdir -p $(dir $(BPF_OBJ))
 	$(CLANG) $(BPF_CFLAGS) $(BPF_CINCLUDES) -c $(BPF_SRC) -o $(BPF_OBJ)
 	-$(LLVM_STRIP) -g $(BPF_OBJ)
 else
 	@echo "build-drift-bpf skipped: requires Linux (current: $(UNAME_S))"
+endif
+
+$(VMLINUX_H):
+ifeq ($(UNAME_S),Linux)
+	@mkdir -p $(BPF_DIR)
+	@if ! command -v $(BPFTOOL) >/dev/null 2>&1; then \
+			echo "Error: bpftool not found in PATH. Install bpftool to build drift BPF programs." >&2; \
+			exit 1; \
+		fi
+	@if [ ! -r "$(BTF_SOURCE)" ]; then \
+			echo "Error: BTF source '$(BTF_SOURCE)' not found or unreadable. Set BTF_SOURCE=/path/to/vmlinux." >&2; \
+			exit 1; \
+		fi
+	$(BPFTOOL) btf dump file $(BTF_SOURCE) format c > $@
+else
+	@echo "vmlinux.h generation skipped on non-Linux host (current: $(UNAME_S))"
 endif
 
 .PHONY: build-server
