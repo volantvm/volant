@@ -68,6 +68,85 @@ static void mount_filesystems(void) {
         panic("mount(/run)");
 }
 
+// Load a kernel module by name (without .ko extension)
+// Returns 0 on success, -1 on failure
+static int load_module(const char *module_name) {
+    char module_path[PATH_MAX];
+    int fd;
+    struct stat st;
+    void *module_data;
+    int ret;
+
+    // Try different module paths and extensions
+    const char *module_paths[] = {
+        "/lib/modules/%s.ko",
+        "/lib/modules/%s.ko.gz",
+        "/lib/modules/%s.ko.xz",
+        "/lib/modules/%s.ko.zst",
+        NULL
+    };
+
+    for (int i = 0; module_paths[i]; i++) {
+        snprintf(module_path, sizeof(module_path), module_paths[i], module_name);
+
+        if (stat(module_path, &st) != 0)
+            continue;
+
+        printf("C INIT: Found module %s at %s\n", module_name, module_path);
+
+        fd = open(module_path, O_RDONLY);
+        if (fd < 0) {
+            fprintf(stderr, "C INIT: Failed to open %s: %s\n", module_path, strerror(errno));
+            continue;
+        }
+
+        module_data = malloc(st.st_size);
+        if (!module_data) {
+            fprintf(stderr, "C INIT: Failed to allocate memory for %s\n", module_name);
+            close(fd);
+            continue;
+        }
+
+        if (read(fd, module_data, st.st_size) != st.st_size) {
+            fprintf(stderr, "C INIT: Failed to read %s\n", module_path);
+            free(module_data);
+            close(fd);
+            continue;
+        }
+        close(fd);
+
+        // Try to load the module using init_module syscall (175 on x86_64)
+        ret = syscall(175, module_data, st.st_size, "");
+        if (ret != 0 && errno != EEXIST) {
+            fprintf(stderr, "C INIT: init_module(%s) failed: %s\n", module_name, strerror(errno));
+        }
+        free(module_data);
+
+        if (ret == 0 || errno == EEXIST) {
+            printf("C INIT: Loaded kernel module %s\n", module_name);
+            return 0;
+        }
+    }
+
+    fprintf(stderr, "C INIT: Module %s not found in initramfs\n", module_name);
+    return -1;
+}
+
+// Load required filesystem modules for squashfs and overlayfs
+static void load_filesystem_modules(void) {
+    printf("C INIT: Loading filesystem modules...\n");
+
+    // Load squashfs module
+    if (load_module("squashfs") != 0) {
+        printf("C INIT: squashfs module not loaded (may be built-in)\n");
+    }
+
+    // Load overlay module
+    if (load_module("overlay") != 0) {
+        printf("C INIT: overlay module not loaded (may be built-in)\n");
+    }
+}
+
 // Helper to read a kernel cmdline parameter into caller-provided buffer.
 // Returns 1 when present, 0 otherwise.
 static int get_cmdline_param(const char *key, char *value, size_t value_len) {
@@ -158,10 +237,13 @@ static int try_mount_rootfs(void) {
     }
     
     mkdir("/newroot", 0755);
-    
+
     if (strcmp(rootfs_fstype, "squashfs") == 0) {
         printf("C INIT: Setting up squashfs with overlayfs\n");
-        
+
+        // Load required kernel modules
+        load_filesystem_modules();
+
         // Mount squashfs as lower layer (read-only)
         mkdir("/lower", 0755);
         if (mount(root_device, "/lower", "squashfs", MS_RDONLY, NULL)) {

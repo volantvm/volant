@@ -71,7 +71,7 @@ go build -buildvcs=false -ldflags "-s -w -buildid=" -o "$ROOT_DIR/kestrel" ../cm
 # Prepare staging directory
 WORKDIR=/tmp/initramfs
 rm -rf "$WORKDIR"
-mkdir -p "$WORKDIR"/{bin,sbin,etc,proc,sys,dev,usr/bin,usr/sbin}
+mkdir -p "$WORKDIR"/{bin,sbin,etc,proc,sys,dev,usr/bin,usr/sbin,lib/modules}
 
 # 1) Install deterministic init (static, no build-id)
 gcc -static -s -Wl,--build-id=none "$ROOT_DIR/init.c" -o "$WORKDIR/init"
@@ -88,6 +88,38 @@ if [[ -n "$BUSYBOX_SHA256" ]]; then
 fi
 chmod +x "$WORKDIR/bin/busybox"
 "$WORKDIR/bin/busybox" --install -s "$WORKDIR/bin"
+
+# 3a) Copy kernel modules (squashfs and overlay)
+KERNEL_VERSION=$(uname -r)
+MODULE_DIRS=(
+  "/lib/modules/$KERNEL_VERSION/kernel/fs/squashfs"
+  "/lib/modules/$KERNEL_VERSION/kernel/fs/overlayfs"
+  "/lib/modules/$KERNEL_VERSION/kernel/fs"
+)
+
+echo "Searching for squashfs and overlay kernel modules..."
+for dir in "${MODULE_DIRS[@]}"; do
+  if [[ -d "$dir" ]]; then
+    # Copy squashfs module
+    for mod in "$dir"/squashfs.ko*; do
+      if [[ -f "$mod" ]]; then
+        cp "$mod" "$WORKDIR/lib/modules/"
+        echo "  Copied $(basename "$mod")"
+      fi
+    done
+    # Copy overlay module
+    for mod in "$dir"/overlay.ko*; do
+      if [[ -f "$mod" ]]; then
+        cp "$mod" "$WORKDIR/lib/modules/"
+        echo "  Copied $(basename "$mod")"
+      fi
+    done
+  fi
+done
+
+if [[ -z "$(ls -A "$WORKDIR/lib/modules/" 2>/dev/null)" ]]; then
+  echo "WARNING: No kernel modules found - squashfs/overlay must be built-in to kernel"
+fi
 
 # 3b) Inject copies requested by user
 copy_into_workdir() {
