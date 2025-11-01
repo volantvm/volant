@@ -984,20 +984,30 @@ func (a *App) startWorkload() error {
 	existingDone := a.workloadDone
 	a.mu.Unlock()
 
-	if strings.TrimSpace(strings.ToLower(manifest.Workload.Type)) != "http" {
-		return nil
-	}
-	baseURL := strings.TrimSpace(manifest.Workload.BaseURL)
-	if baseURL == "" {
-		return fmt.Errorf("manifest workload base_url required for http workload")
-	}
-	if len(manifest.Workload.Entrypoint) == 0 || strings.TrimSpace(manifest.Workload.Entrypoint[0]) == "" {
-		return fmt.Errorf("manifest workload entrypoint required for http workload")
+	workloadType := strings.TrimSpace(strings.ToLower(manifest.Workload.Type))
+
+	// Validate workload type
+	if workloadType != "exec" && workloadType != "http" && workloadType != "grpc" {
+		return fmt.Errorf("unsupported workload type %q (supported: exec, http, grpc)", manifest.Workload.Type)
 	}
 
-	parsedBase, err := url.Parse(baseURL)
-	if err != nil {
-		return fmt.Errorf("manifest workload base_url invalid: %w", err)
+	// Validate entrypoint
+	if len(manifest.Workload.Entrypoint) == 0 || strings.TrimSpace(manifest.Workload.Entrypoint[0]) == "" {
+		return fmt.Errorf("manifest workload entrypoint required")
+	}
+
+	// HTTP-specific validation
+	var parsedBase *url.URL
+	if workloadType == "http" {
+		baseURL := strings.TrimSpace(manifest.Workload.BaseURL)
+		if baseURL == "" {
+			return fmt.Errorf("manifest workload base_url required for http workload")
+		}
+		var err error
+		parsedBase, err = url.Parse(baseURL)
+		if err != nil {
+			return fmt.Errorf("manifest workload base_url invalid: %w", err)
+		}
 	}
 
 	spec := workloadSignature(manifest.Workload)
@@ -1068,26 +1078,29 @@ func (a *App) startWorkload() error {
 		a.mu.Unlock()
 	}()
 
-	if err := a.waitForHealth(procCtx, parsedBase, manifest.HealthCheck); err != nil {
-		a.log.Printf("workload health check failed: %v", err)
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(10 * time.Second):
-			a.log.Printf("workload process shutdown timed out after health failure")
+	// HTTP workloads: wait for health check
+	if workloadType == "http" && parsedBase != nil {
+		if err := a.waitForHealth(procCtx, parsedBase, manifest.HealthCheck); err != nil {
+			a.log.Printf("workload health check failed: %v", err)
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				a.log.Printf("workload process shutdown timed out after health failure")
+			}
+			a.mu.Lock()
+			if a.workloadCmd == cmd {
+				a.workloadCmd = nil
+				a.workloadCancel = nil
+				a.workloadDone = nil
+				a.workloadSpec = ""
+			}
+			a.mu.Unlock()
+			return fmt.Errorf("workload health check failed: %w", err)
 		}
-		a.mu.Lock()
-		if a.workloadCmd == cmd {
-			a.workloadCmd = nil
-			a.workloadCancel = nil
-			a.workloadDone = nil
-			a.workloadSpec = ""
-		}
-		a.mu.Unlock()
-		return fmt.Errorf("workload health check failed: %w", err)
 	}
 
-	a.log.Printf("workload process started (pid=%d)", cmd.Process.Pid)
+	a.log.Printf("workload process started (type=%s, pid=%d)", workloadType, cmd.Process.Pid)
 	return nil
 }
 

@@ -68,8 +68,6 @@ type CreateVMRequest struct {
 	Name              string
 	Plugin            string
 	Runtime           string
-	CPUCores          int // DEPRECATED: Use Overrides.CPUCores instead
-	MemoryMB          int // DEPRECATED: Use Overrides.MemoryMB instead
 	KernelCmdlineHint string
 	Manifest          *pluginspec.Manifest
 	APIHost           string
@@ -374,8 +372,8 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 			IPAddress:     ipAddress,
 			MACAddress:    mac,
 			VsockCID:      vsockCID,
-			CPUCores:      req.CPUCores,
-			MemoryMB:      req.MemoryMB,
+			CPUCores:      0, // Will be set from config after merge
+			MemoryMB:      0, // Will be set from config after merge
 			KernelCmdline: fullCmdline,
 			GroupID:       req.GroupID,
 		}
@@ -439,30 +437,16 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		configToStore.Runtime = req.Runtime
 	} else if manifestForConfig != nil {
 		// Use new merge logic: apply overrides on top of manifest defaults
-		overrides := req.Overrides
-
-		// Support legacy CPUCores/MemoryMB fields for backwards compatibility
-		if req.CPUCores > 0 && overrides.CPUCores == nil {
-			overrides.CPUCores = &req.CPUCores
-		}
-		if req.MemoryMB > 0 && overrides.MemoryMB == nil {
-			overrides.MemoryMB = &req.MemoryMB
-		}
-
 		var err error
-		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, overrides, pluginName, req.Runtime)
+		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, req.Overrides, pluginName, req.Runtime)
 		if err != nil {
 			e.rollbackCreate(ctx, vmRecord)
 			return nil, fmt.Errorf("build vm config: %w", err)
 		}
 	} else {
-		// No manifest or config provided - use system defaults
-		configToStore.Plugin = pluginName
-		configToStore.Runtime = req.Runtime
-		configToStore.Resources = vmconfig.Resources{
-			CPUCores: vmRecord.CPUCores,
-			MemoryMB: vmRecord.MemoryMB,
-		}
+		// No manifest or config - ERROR: resources are required
+		e.rollbackCreate(ctx, vmRecord)
+		return nil, fmt.Errorf("orchestrator: cannot create VM without manifest or config (resources required)")
 	}
 
 	// Apply kernel cmdline hint
@@ -480,9 +464,19 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		Port: apiPort,
 	}
 
-	// Ensure resources match the VM record (in case they weren't set via overrides)
-	configToStore.Resources.CPUCores = vmRecord.CPUCores
-	configToStore.Resources.MemoryMB = vmRecord.MemoryMB
+	// Update VM record with final resources from merged config
+	vmRecord.CPUCores = configToStore.Resources.CPUCores
+	vmRecord.MemoryMB = configToStore.Resources.MemoryMB
+
+	// Validate final resources
+	if vmRecord.CPUCores <= 0 {
+		e.rollbackCreate(ctx, vmRecord)
+		return nil, fmt.Errorf("orchestrator: cpu cores must be > 0 (got %d after merging config)", vmRecord.CPUCores)
+	}
+	if vmRecord.MemoryMB <= 0 {
+		e.rollbackCreate(ctx, vmRecord)
+		return nil, fmt.Errorf("orchestrator: memory must be > 0 (got %d after merging config)", vmRecord.MemoryMB)
+	}
 
 	var seedDisk *runtime.Disk
 	var cloudInitRecord *db.VMCloudInit
@@ -1777,8 +1771,6 @@ func (e *engine) reconcileDeployment(ctx context.Context, group db.VMGroup) (Dep
 				Name:              vmName,
 				Plugin:            cfgClone.Plugin,
 				Runtime:           cfgClone.Runtime,
-				CPUCores:          cfgClone.Resources.CPUCores,
-				MemoryMB:          cfgClone.Resources.MemoryMB,
 				KernelCmdlineHint: cfgClone.KernelCmdline,
 				Manifest:          &manifestCopy,
 				APIHost:           cfgClone.API.Host,
@@ -2036,12 +2028,8 @@ func validateCreateRequest(req CreateVMRequest) error {
 	if req.Name == "" {
 		return fmt.Errorf("orchestrator: vm name required")
 	}
-	if req.CPUCores <= 0 {
-		return fmt.Errorf("orchestrator: cpu cores must be > 0")
-	}
-	if req.MemoryMB <= 0 {
-		return fmt.Errorf("orchestrator: memory must be > 0")
-	}
+	// NOTE: CPUCores and MemoryMB validation removed - these are deprecated fields.
+	// Resources are validated after merging manifest + overrides in the vmconfig.
 	return nil
 }
 

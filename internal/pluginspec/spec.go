@@ -426,7 +426,13 @@ func (w Workload) Validate() error {
 		return fmt.Errorf("plugin manifest: workload type required")
 	}
 	switch typeNormalized {
+	case "exec":
+		// Exec workload: just needs entrypoint (executable + args)
+		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
+			return fmt.Errorf("plugin manifest: workload.entrypoint required for exec workload")
+		}
 	case "http":
+		// HTTP workload: needs base_url and entrypoint
 		if strings.TrimSpace(w.BaseURL) == "" {
 			return fmt.Errorf("plugin manifest: workload.base_url required for http workload")
 		}
@@ -436,8 +442,13 @@ func (w Workload) Validate() error {
 		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
 			return fmt.Errorf("plugin manifest: workload.entrypoint required for http workload")
 		}
+	case "grpc":
+		// gRPC workload: needs entrypoint (future support)
+		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
+			return fmt.Errorf("plugin manifest: workload.entrypoint required for grpc workload")
+		}
 	default:
-		return fmt.Errorf("plugin manifest: workload type %q not supported", w.Type)
+		return fmt.Errorf("plugin manifest: workload type %q not supported (supported: exec, http, grpc)", w.Type)
 	}
 	return nil
 }

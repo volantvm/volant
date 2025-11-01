@@ -1141,8 +1141,6 @@ func (api *apiServer) handleMCP(c *gin.Context) {
 				Name:     name,
 				Plugin:   runtime,
 				Runtime:  runtime,
-				CPUCores: manifest.Resources.CPUCores,
-				MemoryMB: manifest.Resources.MemoryMB,
 				Manifest: &manifestCopy,
 				APIHost:  hostIP,
 				APIPort:  portStr,
