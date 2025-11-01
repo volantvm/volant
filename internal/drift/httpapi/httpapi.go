@@ -28,6 +28,7 @@ func New(ctrl *controller.Controller) http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", h.handleHealth)
+	r.Get("/metrics", h.handleMetrics)
 	r.Group(func(r chi.Router) {
 		r.Get("/routes", h.handleListRoutes)
 		r.Post("/routes", h.handleUpsertRoute)
@@ -40,6 +41,16 @@ func New(ctrl *controller.Controller) http.Handler {
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	stats, err := h.controller.Stats(ctx)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {

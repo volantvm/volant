@@ -96,6 +96,14 @@ func (c *Controller) Restore(ctx context.Context) error {
 	return nil
 }
 
+// Stats returns dataplane metrics (packets/bytes counters).
+func (c *Controller) Stats(ctx context.Context) (dataplane.Stats, error) {
+	if c.dp == nil {
+		return dataplane.Stats{}, RuntimeUnavailableError{Component: "bridge dataplane"}
+	}
+	return c.dp.Stats(ctx)
+}
+
 func normalize(route routes.Route) (routes.Route, error) {
 	if route.HostPort == 0 {
 		return routes.Route{}, fmt.Errorf("host_port must be > 0")
