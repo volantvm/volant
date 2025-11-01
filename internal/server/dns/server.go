@@ -120,36 +120,24 @@ func (s *Server) resolveService(name string) ([]string, error) {
 	ctx := context.Background()
 
 	// Try VM lookup first
-	vm, err := s.store.WithTx(ctx, func(q db.Queries) (interface{}, error) {
-		return q.VirtualMachines().GetByName(ctx, name)
-	})
-	if err == nil && vm != nil {
-		if vmRecord, ok := vm.(*db.VM); ok && vmRecord.IPAddress != "" && vmRecord.Status == db.VMStatusRunning {
-			return []string{vmRecord.IPAddress}, nil
-		}
+	vm, err := s.store.Queries().VirtualMachines().GetByName(ctx, name)
+	if err == nil && vm != nil && vm.IPAddress != "" && vm.Status == db.VMStatusRunning {
+		return []string{vm.IPAddress}, nil
 	}
 
 	// Try deployment lookup (returns all running VM IPs for round-robin)
-	deployment, err := s.store.WithTx(ctx, func(q db.Queries) (interface{}, error) {
-		return q.Deployments().GetByName(ctx, name)
-	})
-	if err == nil && deployment != nil {
-		if depRecord, ok := deployment.(*db.Deployment); ok {
-			vms, err := s.store.WithTx(ctx, func(q db.Queries) (interface{}, error) {
-				return q.VirtualMachines().ListByGroupID(ctx, depRecord.ID)
-			})
-			if err == nil && vms != nil {
-				if vmList, ok := vms.([]*db.VM); ok {
-					var ips []string
-					for _, vm := range vmList {
-						if vm.IPAddress != "" && vm.Status == db.VMStatusRunning {
-							ips = append(ips, vm.IPAddress)
-						}
-					}
-					if len(ips) > 0 {
-						return ips, nil
-					}
+	group, err := s.store.Queries().VMGroups().GetByName(ctx, name)
+	if err == nil && group != nil {
+		vms, err := s.store.Queries().VirtualMachines().ListByGroupID(ctx, group.ID)
+		if err == nil {
+			var ips []string
+			for _, vm := range vms {
+				if vm.IPAddress != "" && vm.Status == db.VMStatusRunning {
+					ips = append(ips, vm.IPAddress)
 				}
+			}
+			if len(ips) > 0 {
+				return ips, nil
 			}
 		}
 	}
