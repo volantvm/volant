@@ -232,59 +232,59 @@ func TestTimestampCoercionHandlesRFC3339(t *testing.T) {
 	}
 }
 
-func TestPluginRepository(t *testing.T) {
+func TestImageRepository(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)
 	t.Cleanup(func() { _ = store.Close(ctx) })
 
-	repo := store.Queries().Plugins()
+	repo := store.Queries().Images()
 
-	plugin := db.Plugin{
+	image := db.Image{
 		Name:     "browser",
 		Version:  "1.0.0",
 		Enabled:  true,
 		Metadata: []byte(`{"image":"browser-runtime"}`),
 	}
-	if err := repo.Upsert(ctx, plugin); err != nil {
-		t.Fatalf("upsert plugin: %v", err)
+	if err := repo.Upsert(ctx, image); err != nil {
+		t.Fatalf("upsert image: %v", err)
 	}
 
 	stored, err := repo.GetByName(ctx, "browser")
 	if err != nil {
-		t.Fatalf("get plugin: %v", err)
+		t.Fatalf("get image: %v", err)
 	}
 	if stored == nil {
-		t.Fatalf("expected plugin, got nil")
+		t.Fatalf("expected image, got nil")
 	}
 	if stored.Version != "1.0.0" || !stored.Enabled {
-		t.Fatalf("unexpected stored plugin: %+v", stored)
+		t.Fatalf("unexpected stored image: %+v", stored)
 	}
-	if string(stored.Metadata) != string(plugin.Metadata) {
+	if string(stored.Metadata) != string(image.Metadata) {
 		t.Fatalf("metadata mismatch: %q", stored.Metadata)
 	}
 
 	time.Sleep(10 * time.Millisecond)
-	if err := repo.Upsert(ctx, db.Plugin{Name: "browser", Version: "1.1.0", Enabled: false}); err != nil {
-		t.Fatalf("update plugin: %v", err)
+	if err := repo.Upsert(ctx, db.Image{Name: "browser", Version: "1.1.0", Enabled: false}); err != nil {
+		t.Fatalf("update image: %v", err)
 	}
 
 	updated, err := repo.GetByName(ctx, "browser")
 	if err != nil {
-		t.Fatalf("get updated plugin: %v", err)
+		t.Fatalf("get updated image: %v", err)
 	}
 	if updated == nil || updated.Version != "1.1.0" || updated.Enabled {
-		t.Fatalf("plugin not updated: %+v", updated)
+		t.Fatalf("image not updated: %+v", updated)
 	}
 	if !updated.UpdatedAt.After(updated.InstalledAt) && !updated.UpdatedAt.Equal(updated.InstalledAt) {
 		t.Fatalf("timestamps not updated: install=%v updated=%v", updated.InstalledAt, updated.UpdatedAt)
 	}
 
-	plugins, err := repo.List(ctx)
+	images, err := repo.List(ctx)
 	if err != nil {
-		t.Fatalf("list plugins: %v", err)
+		t.Fatalf("list images: %v", err)
 	}
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(images))
 	}
 
 	if err := repo.SetEnabled(ctx, "browser", true); err != nil {
@@ -295,12 +295,12 @@ func TestPluginRepository(t *testing.T) {
 		t.Fatalf("get after enable: %v", err)
 	}
 	if enabled == nil || !enabled.Enabled {
-		t.Fatalf("expected plugin enabled, got %+v", enabled)
+		t.Fatalf("expected image enabled, got %+v", enabled)
 	}
 
 	if err := repo.Delete(ctx, "browser"); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			t.Fatalf("delete plugin: %v", err)
+			t.Fatalf("delete image: %v", err)
 		}
 	}
 
