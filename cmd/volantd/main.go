@@ -22,6 +22,7 @@ import (
 	"github.com/volantvm/volant/internal/server/app"
 	"github.com/volantvm/volant/internal/server/config"
 	"github.com/volantvm/volant/internal/server/db/sqlite"
+	"github.com/volantvm/volant/internal/server/dns"
 	"github.com/volantvm/volant/internal/server/driftclient"
 	"github.com/volantvm/volant/internal/server/eventbus/memory"
 	"github.com/volantvm/volant/internal/server/httpapi"
@@ -95,6 +96,19 @@ func main() {
 	if err != nil {
 		logger.Error("init orchestrator", "error", err)
 		os.Exit(1)
+	}
+
+	// Start DNS server for service discovery
+	if cfg.DNSEnabled {
+		dnsServer := dns.New(store, cfg.DNSListen, cfg.DNSDomain, logger)
+		go func() {
+			logger.Info("dns server starting", "listen", cfg.DNSListen, "domain", cfg.DNSDomain)
+			if err := dnsServer.Start(ctx); err != nil {
+				logger.Error("dns server failed", "error", err)
+			}
+		}()
+	} else {
+		logger.Info("dns server disabled")
 	}
 
 	var driftClient *driftclient.Client

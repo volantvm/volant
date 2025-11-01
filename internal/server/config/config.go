@@ -26,6 +26,8 @@ const (
 	defaultBZImagePath   = "/var/lib/volant/kernel/bzImage"
 	defaultVMLinuxPath   = "/var/lib/volant/kernel/vmlinux"
 	defaultDriftEndpoint = ""
+	defaultDNSListen     = "192.168.127.1:53"
+	defaultDNSDomain     = "volant"
 )
 
 // ServerConfig captures the runtime configuration required by the daemon.
@@ -43,6 +45,9 @@ type ServerConfig struct {
 	LogDir           string
 	DriftEndpoint    string
 	DriftAPIKey      string
+	DNSEnabled       bool
+	DNSListen        string
+	DNSDomain        string
 }
 
 // FromEnv loads server configuration from environment variables, applying
@@ -60,6 +65,9 @@ func FromEnv() (ServerConfig, error) {
 		LogDir:           getenv("VOLANT_LOG_DIR", defaultLogDir),
 		DriftEndpoint:    strings.TrimSpace(os.Getenv("VOLANT_DRIFT_ENDPOINT")),
 		DriftAPIKey:      strings.TrimSpace(os.Getenv("VOLANT_DRIFT_API_KEY")),
+		DNSEnabled:       getenv("VOLANT_DNS_ENABLED", "true") != "false",
+		DNSListen:        getenv("VOLANT_DNS_LISTEN", defaultDNSListen),
+		DNSDomain:        getenv("VOLANT_DNS_DOMAIN", defaultDNSDomain),
 	}
 
 	if cfg.DriftEndpoint == "" {

@@ -8,6 +8,7 @@ package orchestrator
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -577,6 +578,11 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	if pluginName != "" {
 		cmdArgs[pluginspec.PluginKey] = pluginName
 	}
+
+	// Add DNS configuration for service discovery
+	// DNS server is volantd running on the host (192.168.127.1:53)
+	cmdArgs["volant.dns_server"] = e.hostIP.String()
+	cmdArgs["volant.dns_search"] = "volant"
 	if req.Manifest != nil {
 		encodedManifest, err := pluginspec.Encode(*req.Manifest)
 		if err != nil {
@@ -585,6 +591,26 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		}
 		cmdArgs[pluginspec.CmdlineKey] = encodedManifest
 	}
+
+	// Encode environment variables into kernel cmdline
+	if envData, ok := configToStore.Metadata["env"]; ok && envData != nil {
+		if envMap, ok := envData.(map[string]string); ok && len(envMap) > 0 {
+			envJSON, err := json.Marshal(envMap)
+			if err != nil {
+				e.logger.Error("marshal env", "vm", req.Name, "error", err)
+				if seedDisk != nil {
+					_ = os.Remove(seedDisk.Path)
+				}
+				_ = e.network.CleanupTap(ctx, tapName)
+				e.rollbackCreate(ctx, vmRecord)
+				return nil, fmt.Errorf("orchestrator: marshal env: %w", err)
+			}
+			envEncoded := base64.StdEncoding.EncodeToString(envJSON)
+			cmdArgs["volant.env"] = envEncoded
+			e.logger.Info("encoded env vars", "vm", req.Name, "count", len(envMap))
+		}
+	}
+
 	spec.Args = cmdArgs
 
 	if req.Manifest != nil {

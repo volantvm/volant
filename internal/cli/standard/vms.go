@@ -180,7 +180,7 @@ func newVMsCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			pluginFlag, err := cmd.Flags().GetString("plugin")
+			imageFlag, err := cmd.Flags().GetString("image")
 			if err != nil {
 				return err
 			}
@@ -213,16 +213,16 @@ func newVMsCreateCmd() *cobra.Command {
 				cfg = &parsed
 			}
 
-			pluginName := strings.TrimSpace(pluginFlag)
+			imageName := strings.TrimSpace(imageFlag)
 			if cfg != nil && strings.TrimSpace(cfg.Plugin) != "" {
-				cfgPlugin := strings.TrimSpace(cfg.Plugin)
-				if pluginName != "" && !strings.EqualFold(pluginName, cfgPlugin) {
-					return fmt.Errorf("plugin mismatch between flag (%s) and config (%s)", pluginName, cfgPlugin)
+				cfgImage := strings.TrimSpace(cfg.Plugin)
+				if imageName != "" && !strings.EqualFold(imageName, cfgImage) {
+					return fmt.Errorf("image mismatch between flag (%s) and config (%s)", imageName, cfgImage)
 				}
-				pluginName = cfgPlugin
+				imageName = cfgImage
 			}
-			if pluginName == "" {
-				return fmt.Errorf("plugin is required (flag or config file)")
+			if imageName == "" {
+				return fmt.Errorf("image is required (--image flag or config file)")
 			}
 
 			api, err := clientFromCmd(cmd)
@@ -232,7 +232,7 @@ func newVMsCreateCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 			defer cancel()
 
-			manifest, err := api.DescribeImage(ctx, pluginName)
+			manifest, err := api.DescribeImage(ctx, imageName)
 			if err != nil {
 				return err
 			}
@@ -252,7 +252,7 @@ func newVMsCreateCmd() *cobra.Command {
 				runtimeName = manifest.Name
 			}
 			if strings.TrimSpace(runtimeName) == "" {
-				return fmt.Errorf("plugin %s does not define a runtime", pluginName)
+				return fmt.Errorf("image %s does not define a runtime", imageName)
 			}
 
 			kernelExtra := strings.TrimSpace(kernelFlag)
@@ -343,7 +343,7 @@ func newVMsCreateCmd() *cobra.Command {
 
 			req := client.CreateVMRequest{
 				Name:          args[0],
-				Plugin:        pluginName,
+				Plugin:        imageName,
 				Runtime:       runtimeName,
 				KernelCmdline: kernelExtra,
 				APIHost:       apiHost,
@@ -352,7 +352,7 @@ func newVMsCreateCmd() *cobra.Command {
 			}
 			if cfg != nil {
 				cfgClone := cfg.Clone()
-				cfgClone.Plugin = pluginName
+				cfgClone.Plugin = imageName
 				cfgClone.Runtime = runtimeName
 				cfgClone.KernelCmdline = kernelExtra
 				cfgClone.API = vmconfig.API{Host: apiHost, Port: apiPort}
@@ -390,7 +390,7 @@ func newVMsCreateCmd() *cobra.Command {
 
 				if needConfig {
 					cfgClone := vmconfig.Config{
-						Plugin:        pluginName,
+						Plugin:        imageName,
 						Runtime:       runtimeName,
 						KernelCmdline: kernelExtra,
 						API:           vmconfig.API{Host: apiHost, Port: apiPort},
@@ -435,7 +435,7 @@ func newVMsCreateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String("runtime", "", "Runtime type to launch (derived from plugin or config if omitted)")
+	cmd.Flags().String("runtime", "", "Runtime type to launch (derived from image or config if omitted)")
 	cmd.Flags().Int("cpu", 0, "Number of virtual CPU cores (overrides manifest default)")
 	cmd.Flags().Int("memory", 0, "Memory in MB (overrides manifest default)")
 	cmd.Flags().StringSlice("env", nil, "Environment variables in KEY=VALUE format (repeatable, overrides manifest defaults)")
@@ -444,7 +444,7 @@ func newVMsCreateCmd() *cobra.Command {
 	cmd.Flags().String("kernel", "", "Override kernel image path (vmlinux)")
 	cmd.Flags().String("initramfs", "", "Override initramfs image path (.cpio.gz)")
 	cmd.Flags().String("initramfs-checksum", "", "Checksum for initramfs (e.g., sha256:deadbeef...) (optional)")
-	cmd.Flags().String("plugin", "", "Plugin name to use when creating the VM")
+	cmd.Flags().String("image", "", "Image name to use when creating the VM")
 	cmd.Flags().StringVar(&configPath, "config", "", "Path to a VM config JSON file")
 	cmd.Flags().String("api-host", "", "Override agent API host for the VM")
 	cmd.Flags().String("api-port", "", "Override agent API port for the VM")

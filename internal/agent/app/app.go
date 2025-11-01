@@ -8,6 +8,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,6 +89,16 @@ func Run(ctx context.Context) error {
 		bootLog.Printf("warning: could not open /dev/console: %v", consoleErr)
 	} else {
 		bootLog = log.New(consoleFile, "kestrel-boot: ", log.LstdFlags|log.LUTC)
+	}
+
+	// Decode and set environment variables from kernel cmdline early
+	if err := setEnvironmentFromCmdline(bootLog); err != nil {
+		bootLog.Printf("warning: failed to set environment from cmdline: %v", err)
+	}
+
+	// Configure DNS from kernel cmdline for service discovery
+	if err := configureDNSFromCmdline(bootLog); err != nil {
+		bootLog.Printf("warning: failed to configure DNS from cmdline: %v", err)
 	}
 
 	cfg := loadConfig()
@@ -489,6 +500,98 @@ func loadConfig() Config {
 		ShellCommand:        shellCommand,
 		ShellTTY:            shellTTY,
 	}
+}
+
+func setEnvironmentFromCmdline(logger *log.Logger) error {
+	data, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return fmt.Errorf("read /proc/cmdline: %w", err)
+	}
+
+	fields := strings.Fields(string(data))
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if parts[0] != "volant.env" {
+			continue
+		}
+
+		// Decode base64 JSON env map
+		envEncoded := parts[1]
+		envJSON, err := base64.StdEncoding.DecodeString(envEncoded)
+		if err != nil {
+			return fmt.Errorf("decode base64 env: %w", err)
+		}
+
+		var envMap map[string]string
+		if err := json.Unmarshal(envJSON, &envMap); err != nil {
+			return fmt.Errorf("unmarshal env json: %w", err)
+		}
+
+		// Set environment variables
+		for key, value := range envMap {
+			if err := os.Setenv(key, value); err != nil {
+				logger.Printf("warning: failed to set env %s: %v", key, err)
+			}
+		}
+
+		if len(envMap) > 0 {
+			logger.Printf("set %d environment variables from kernel cmdline", len(envMap))
+		}
+		return nil
+	}
+
+	return nil // No volant.env parameter found (not an error)
+}
+
+func configureDNSFromCmdline(logger *log.Logger) error {
+	data, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return fmt.Errorf("read /proc/cmdline: %w", err)
+	}
+
+	fields := strings.Fields(string(data))
+	var dnsServer, dnsSearch string
+
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		switch parts[0] {
+		case "volant.dns_server":
+			dnsServer = parts[1]
+		case "volant.dns_search":
+			dnsSearch = parts[1]
+		}
+	}
+
+	// Only configure DNS if we have a DNS server
+	if dnsServer == "" {
+		return nil // Not an error - DNS not configured
+	}
+
+	// Ensure /etc directory exists
+	if err := os.MkdirAll("/etc", 0755); err != nil {
+		return fmt.Errorf("create /etc directory: %w", err)
+	}
+
+	// Build resolv.conf content
+	var resolvConf strings.Builder
+	resolvConf.WriteString(fmt.Sprintf("nameserver %s\n", dnsServer))
+	if dnsSearch != "" {
+		resolvConf.WriteString(fmt.Sprintf("search %s\n", dnsSearch))
+	}
+
+	// Write /etc/resolv.conf
+	if err := os.WriteFile("/etc/resolv.conf", []byte(resolvConf.String()), 0644); err != nil {
+		return fmt.Errorf("write /etc/resolv.conf: %w", err)
+	}
+
+	logger.Printf("configured DNS: nameserver=%s search=%s", dnsServer, dnsSearch)
+	return nil
 }
 
 func resolveManifest() (*pluginspec.Manifest, error) {
