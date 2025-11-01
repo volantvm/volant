@@ -101,11 +101,13 @@ openapi-export: build-openapi-export ## Generate OpenAPI JSON to docs/6_referenc
 \t$(BIN_DIR)/openapi-export -server https://docs.volantvm.com -output docs/6_reference/api/openapi.json
 
 .PHONY: install
-install: build ## Install core binaries into INSTALL_DIR (default: /usr/local/bin)
+install: build build-drift ## Install core binaries and drift into INSTALL_DIR (default: /usr/local/bin)
 	mkdir -p $(INSTALL_DIR)
 	install -m 0755 $(BIN_DIR)/volantd $(INSTALL_DIR)/volantd
 	install -m 0755 $(BIN_DIR)/kestrel $(INSTALL_DIR)/kestrel
 	install -m 0755 $(BIN_DIR)/volar $(INSTALL_DIR)/volar
+	install -m 0755 $(BIN_DIR)/driftd $(INSTALL_DIR)/driftd
+	@if [ -f "$(BIN_DIR)/drift_l4.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4.bpf.o" "$(INSTALL_DIR)/drift_l4.bpf.o"; fi
 
 .PHONY: install-drift
 install-drift: build-drift ## Install driftd binary, BPF object, and systemd unit
