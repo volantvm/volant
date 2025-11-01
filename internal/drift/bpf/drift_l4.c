@@ -358,16 +358,8 @@ int drift_l4_ingress(struct __sk_buff *skb)
 				return TC_ACT_OK; // No backends configured
 
 			// Select backend using configured algorithm
-			struct backend_value *backend = lookup_backend(proto, tcph->dest, iph->saddr, bc_value->lb_algorithm, bc_value);
-			if (!backend)
+			if (lookup_backend(proto, tcph->dest, iph->saddr, bc_value->lb_algorithm, bc_value, &dst_ip, &dst_port) != 0)
 				return TC_ACT_OK; // No healthy backend found
-
-			dst_ip = backend->dst_ip;
-			dst_port = backend->dst_port;
-
-			// Increment connection count for least-conn algorithm
-			if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
-				__sync_fetch_and_add(&backend->conn_count, 1);
 		}
 
 		// Track connection for reverse NAT
@@ -420,16 +412,8 @@ int drift_l4_ingress(struct __sk_buff *skb)
 				return TC_ACT_OK; // No backends configured
 
 			// Select backend using configured algorithm
-			struct backend_value *backend = lookup_backend(proto, udph->dest, iph->saddr, bc_value->lb_algorithm, bc_value);
-			if (!backend)
+			if (lookup_backend(proto, udph->dest, iph->saddr, bc_value->lb_algorithm, bc_value, &dst_ip, &dst_port) != 0)
 				return TC_ACT_OK; // No healthy backend found
-
-			dst_ip = backend->dst_ip;
-			dst_port = backend->dst_port;
-
-			// Increment connection count for least-conn algorithm
-			if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
-				__sync_fetch_and_add(&backend->conn_count, 1);
 		}
 
 		// Track connection for reverse NAT
