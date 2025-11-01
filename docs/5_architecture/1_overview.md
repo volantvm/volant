@@ -1,4 +1,9 @@
-# Architecture Overview
+---
+title: "Architecture Overview"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 This overview is based on the actual Volant source code. It explains how the control plane, orchestrator, networking, runtime launcher, and agent cooperate to turn a plugin manifest into a running microVM.
 
@@ -18,16 +23,16 @@ Guest (microVM)
 - Workload proxy (HTTP) and actions surface via agent
 
 Builder (external)
-- Fledge converts OCI images or scratch roots into boot media and emits a plugin manifest consumed by Volant.
+- Fledge converts OCI images or scratch roots into boot media and emits an image manifest consumed by Volant.
 
 ## Core Concepts
 
-- Plugin Manifest (internal/pluginspec/spec.go)
-  - Declares workload, resources, networking defaults, cloud‑init, actions, and boot media (exactly one of initramfs or rootfs).
+- Image Manifest (internal/pluginspec/spec.go)
+  - Declares workload, resources, networking defaults, cloud-init, actions, and boot media (exactly one of initramfs or rootfs).
   - Serialized into kernel cmdline (volant.manifest) via base64+gzip (Encode/Decode).
 
 - VM Config (internal/server/orchestrator/vmconfig)
-  - Per‑VM/deployment overrides and recorded history. The orchestrator merges manifest defaults with config overrides at runtime.
+  - Per-VM/deployment overrides and recorded history. The orchestrator merges manifest defaults with config overrides at runtime.
 
 - Runtime Launcher (internal/server/orchestrator/runtime)
   - Abstracts the hypervisor process. The orchestrator builds a LaunchSpec and calls Launcher.Launch to start a VM.
@@ -44,8 +49,8 @@ Builder (external)
 
 ## Control Plane Flow
 
-1) Client installs a plugin manifest via API or CLI
-   - Stored in DB (internal/server/db) and registered in an in‑memory registry.
+1) Client installs an image manifest via API or CLI
+   - Stored in DB (internal/server/db) and registered in an in-memory registry.
 
 2) Create VM
    - API: POST /api/v1/vms or deployments
@@ -84,13 +89,21 @@ Builder (external)
 
 ## Boot Media and Kernels
 
+- Kernel selection
+  - Launcher defaults to bzImage (compressed)
+  - Falls back to vmlinux (uncompressed ELF) if bzImage not available
+  - Both contain the same embedded initramfs with kestrel + C init
+  - KernelOverride in manifest or VM config takes precedence over defaults
+
 - Initramfs strategy
-  - Launcher prefers a pristine vmlinux when Initramfs is present unless KernelOverride is set.
-  - Manifest.Initramfs.url is required; checksum optional.
+  - Manifest.Initramfs.url is required; checksum optional
+  - Launcher passes initramfs via --initramfs flag to cloud-hypervisor
+  - Embedded C init stays in initramfs environment, executes kestrel as PID 1
 
 - RootFS strategy
-  - Launcher uses bzImage and attaches a root disk image.
-  - Manifest.RootFS.url is required; checksum optional; default device/fstype = vda/ext4 if not provided.
+  - Manifest.RootFS.url is required; checksum optional; default device/fstype = vda/ext4 if not provided
+  - Launcher attaches root disk and sets root= and rootfstype= kernel cmdline parameters
+  - Embedded C init mounts rootfs, pivots into it, chains to rootfs init
 
 ## Security and Isolation
 
@@ -108,7 +121,7 @@ Builder (external)
 - VirtualMachines: runtime state, sockets, IP, CPU/mem, kernel cmdline
 - VMConfigs: versioned config snapshots
 - VMGroups: deployments (desired replicas + base config)
-- Plugins: installed manifests and enabled flag
+- Images: installed manifests and enabled flag
 - IPAllocations: simple IPAM for managed subnet
 
 ## Where to Look in Code
@@ -118,8 +131,8 @@ Builder (external)
 - Orchestrator engine: internal/server/orchestrator/orchestrator.go
 - Runtime interface: internal/server/orchestrator/runtime/runtime.go
 - Network bridge/tap: internal/server/orchestrator/network
-- Cloud‑init builder: internal/server/orchestrator/cloudinit
-- Plugin spec: internal/pluginspec/spec.go
+- Cloud-init builder: internal/server/orchestrator/cloudinit
+- Image manifest spec: internal/pluginspec/spec.go
 - Setup utility: internal/setup/setup.go
 
 ## Related Deep Dives

@@ -115,7 +115,7 @@ jobs:
           scripts/config --enable DEBUG_INFO_NONE || true
           yes "" | make ARCH=${{ env.ARCH }} olddefconfig
 
-      - name: Build kernel (bzImage)
+      - name: Build kernel (bzImage and vmlinux)
         run: |
           set -eu
           cd linux
@@ -126,19 +126,21 @@ jobs:
           make ARCH=${{ env.ARCH }} -j"$(nproc)" bzImage
           mkdir -p "$GITHUB_WORKSPACE/${{ env.OUT_DIR }}/"
           cp arch/x86/boot/bzImage "$GITHUB_WORKSPACE/${{ env.OUT_DIR }}/bzImage"
+          cp vmlinux "$GITHUB_WORKSPACE/${{ env.OUT_DIR }}/vmlinux"
 
       - name: Create kernel metadata
         run: |
           set -eu
           cd ${{ env.OUT_DIR }}
           sha256sum bzImage > bzImage.sha256
+          sha256sum vmlinux > vmlinux.sha256
           cp ../linux/.config ./kernel.config
           echo "${{ steps.chlinux.outputs.commit }}" > ./KERNEL_COMMIT
 
       - name: Generate Checksums For All Artifacts
         run: |
           (cd bin && sha256sum volar kestrel volantd driftd drift_l4.bpf.o) > checksums.txt
-          (cd ${{ env.OUT_DIR }} && sha256sum bzImage) >> checksums.txt
+          (cd ${{ env.OUT_DIR }} && sha256sum bzImage vmlinux) >> checksums.txt
 
       - name: Generate build provenance for all artifacts
         id: attest
@@ -152,6 +154,8 @@ jobs:
             bin/drift_l4.bpf.o
             ${{ env.OUT_DIR }}/bzImage
             ${{ env.OUT_DIR }}/bzImage.sha256
+            ${{ env.OUT_DIR }}/vmlinux
+            ${{ env.OUT_DIR }}/vmlinux.sha256
             ${{ env.OUT_DIR }}/kernel.config
             ${{ env.OUT_DIR }}/KERNEL_COMMIT
             checksums.txt
@@ -169,6 +173,8 @@ jobs:
             bin/drift_l4.bpf.o
             ${{ env.OUT_DIR }}/bzImage
             ${{ env.OUT_DIR }}/bzImage.sha256
+            ${{ env.OUT_DIR }}/vmlinux
+            ${{ env.OUT_DIR }}/vmlinux.sha256
             ${{ env.OUT_DIR }}/kernel.config
             ${{ env.OUT_DIR }}/KERNEL_COMMIT
             checksums.txt

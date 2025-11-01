@@ -273,13 +273,14 @@ static int try_mount_rootfs(void) {
             return 0;
         }
         
-        // CRITICAL: Create work directory INSIDE the tmpfs mount
+        // CRITICAL: Create upper and work directories INSIDE the tmpfs mount
         // overlayfs requires workdir to be on same filesystem as upperdir
+        mkdir("/upper/upper", 0755);
         mkdir("/upper/work", 0755);
-        
+
         // Mount overlayfs
-        if (mount("overlay", "/newroot", "overlay", 0, 
-                  "lowerdir=/lower,upperdir=/upper,workdir=/upper/work")) {
+        if (mount("overlay", "/newroot", "overlay", 0,
+                  "lowerdir=/lower,upperdir=/upper/upper,workdir=/upper/work")) {
             fprintf(stderr, "C INIT: Failed to mount overlayfs: %s\n", strerror(errno));
             umount("/upper");
             umount("/lower");

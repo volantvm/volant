@@ -68,7 +68,7 @@ func main() {
 		logDir,
 	)
 
-	runtimeRegistry := plugins.NewRegistry(store.Queries().Plugins())
+	runtimeRegistry := plugins.NewRegistry(store.Queries().Images())
 
 	var netManager network.Manager
 	if runtime.GOOS == "linux" {

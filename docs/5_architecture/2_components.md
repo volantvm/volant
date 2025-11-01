@@ -1,4 +1,9 @@
-# Components and Responsibilities
+---
+title: "Components and Responsibilities"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 This section drills into each major subsystem with references to concrete code.
 
@@ -16,11 +21,11 @@ This section drills into each major subsystem with references to concrete code.
 
 - OpenAPI generation
   - File: internal/server/httpapi/openapi.go
-  - Exposes /openapi with a generated spec; docs/api-reference/openapi.json is built via cmd/openapi-export
+  - Exposes /openapi with a generated spec; docs/6_reference/api/openapi.json is built via cmd/openapi-export
 
-- Plugins registry
+- Images registry
   - Files: internal/server/plugins/{registry.go, loader.go}
-  - Stores runtime manifests in memory, persists to DB via db.PluginRepository
+  - Stores runtime manifests in memory, persists to DB via db.ImageRepository
   - Action resolution and basic action dispatch path
 
 ## Orchestrator
@@ -29,7 +34,7 @@ This section drills into each major subsystem with references to concrete code.
   - File: internal/server/orchestrator/orchestrator.go
   - Provides VM lifecycle (Create/Start/Stop/Restart/Destroy), deployments, config history, events
   - Merges:
-    - Plugin manifest defaults (internal/pluginspec/spec.go)
+    - Image manifest defaults (internal/pluginspec/spec.go)
     - VM config overrides (internal/server/orchestrator/vmconfig)
 
 - Networking decision helpers
@@ -53,9 +58,10 @@ This section drills into each major subsystem with references to concrete code.
 
 - Cloud Hypervisor launcher
   - Files: internal/server/orchestrator/cloudhypervisor/launcher.go
-  - Selects kernel: KernelOverride > (Initramfs ? vmlinux : bzImage)
+  - Selects kernel: KernelOverride > bzImage > vmlinux (fallback)
   - Streams/fetches initramfs/rootfs with checksum verification
   - Configures --net (tap, mac, ip, mask) or --vsock (cid), disks, serial socket
+  - Passes --initramfs flag when initramfs is provided (handled by embedded C init in bzImage)
 
 ## Data Storage
 
@@ -64,7 +70,7 @@ This section drills into each major subsystem with references to concrete code.
   - Tables:
     - vms: runtime state, identity, resources
     - vm_configs + vm_config_history: versioned spec snapshots
-    - plugins: installed manifests (enabled flag, metadata JSON)
+    - images: installed manifests (enabled flag, metadata JSON)
     - ip_allocations: simple IPAM
     - vm_groups: deployments (desired replicas, config)
 
@@ -97,7 +103,7 @@ This section drills into each major subsystem with references to concrete code.
 
 - openapi-export (docs)
   - File: cmd/openapi-export
-  - Generates docs/api-reference/openapi.json from the live router
+  - Generates docs/6_reference/api/openapi.json from the live router
 
 ## Agent (Guest)
 

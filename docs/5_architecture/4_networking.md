@@ -1,4 +1,9 @@
-# Networking Model
+---
+title: "Networking Model"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Volant supports three network modes declared in the plugin manifest (internal/pluginspec/spec.go) and overridable per-VM via vmconfig.Config.
 

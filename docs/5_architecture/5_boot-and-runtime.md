@@ -1,4 +1,9 @@
-# Boot and Runtime
+---
+title: "Boot and Runtime"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 ## Kernel Selection
 
@@ -7,8 +12,10 @@ References:
 
 - Launcher preference:
   - If LaunchSpec.KernelOverride set → use that path
-  - Else if Initramfs present → use vmlinux (uncompressed)
-  - Else → use bzImage (compressed)
+  - Else if bzImage available → use bzImage (default, compressed)
+  - Else → use vmlinux (uncompressed ELF)
+
+Both bzImage and vmlinux contain the same embedded initramfs with kestrel agent and C init that handles both boot paths. The only difference is compression format.
 
 ## Boot Media
 

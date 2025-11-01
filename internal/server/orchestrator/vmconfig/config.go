@@ -373,7 +373,108 @@ func FromHistory(entry db.VMConfigHistoryEntry) (HistoryEntry, error) {
 	return HistoryEntry{
 		ID:        entry.ID,
 		Version:   entry.Version,
-		UpdatedAt: entry.UpdatedAt,
+		UpdatedAt:   entry.UpdatedAt,
 		Config:    cfg,
 	}, nil
+}
+
+// Overrides represents runtime overrides that can be applied when creating a VM.
+// These take precedence over manifest defaults.
+type Overrides struct {
+	CPUCores     *int
+	MemoryMB     *int
+	Env          map[string]string
+	ExposePorts  []Expose
+	NetworkMode  *string
+}
+
+// FromManifestWithOverrides creates a Config from a manifest and applies runtime overrides.
+// The hierarchy is: Overrides > Manifest defaults > System defaults.
+func FromManifestWithOverrides(manifest *pluginspec.Manifest, overrides Overrides, pluginName, runtime string) (Config, error) {
+	if manifest == nil {
+		return Config{}, fmt.Errorf("vmconfig: manifest is required")
+	}
+
+	// Start with manifest defaults
+	cfg := Config{
+		Plugin:   strings.TrimSpace(pluginName),
+		Runtime:  strings.TrimSpace(runtime),
+		Manifest: manifest,
+	}
+
+	// Apply manifest resources (always present in validated manifests)
+	cfg.Resources = Resources{
+		CPUCores: manifest.Resources.CPUCores,
+		MemoryMB: manifest.Resources.MemoryMB,
+	}
+
+	// Apply resource overrides (highest priority)
+	if overrides.CPUCores != nil {
+		cfg.Resources.CPUCores = *overrides.CPUCores
+	}
+	if overrides.MemoryMB != nil {
+		cfg.Resources.MemoryMB = *overrides.MemoryMB
+	}
+
+	// Merge environment variables from workload + overrides
+	if len(manifest.Workload.Env) > 0 || len(overrides.Env) > 0 {
+		cfg.Metadata = make(map[string]any)
+		envMap := make(map[string]string)
+
+		// Start with manifest workload env
+		for k, v := range manifest.Workload.Env {
+			envMap[k] = v
+		}
+
+		// Override with runtime env (highest priority)
+		for k, v := range overrides.Env {
+			envMap[k] = v
+		}
+
+		cfg.Metadata["env"] = envMap
+	}
+
+	// Apply port exposures (if provided in overrides)
+	if len(overrides.ExposePorts) > 0 {
+		cfg.Expose = overrides.ExposePorts
+	}
+
+	// Apply network configuration
+	if manifest.Network != nil {
+		cfg.Network = manifest.Network
+
+		// Apply network mode override if provided
+		if overrides.NetworkMode != nil {
+			networkCopy := *manifest.Network
+			networkCopy.Mode = pluginspec.NetworkMode(*overrides.NetworkMode)
+			cfg.Network = &networkCopy
+		}
+	}
+
+	// Copy other manifest fields
+	if manifest.CloudInit != nil {
+		cfg.CloudInit = manifest.CloudInit
+	}
+	if manifest.Devices != nil {
+		cfg.Devices = manifest.Devices
+	}
+
+	// Copy initramfs config (struct, not pointer)
+	if strings.TrimSpace(manifest.Initramfs.URL) != "" {
+		initCopy := manifest.Initramfs
+		cfg.Initramfs = &initCopy
+	}
+
+	// Copy rootfs config (struct, not pointer)
+	if strings.TrimSpace(manifest.RootFS.URL) != "" {
+		rootCopy := manifest.RootFS
+		cfg.RootFS = &rootCopy
+	}
+
+	cfg.Normalize()
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+
+	return cfg, nil
 }

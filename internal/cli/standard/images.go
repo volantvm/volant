@@ -21,27 +21,27 @@ import (
 	"github.com/volantvm/volant/internal/pluginspec"
 )
 
-func newPluginsCmd() *cobra.Command {
+func newImagesCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "plugins",
-		Short: "Manage engine plugins",
+		Use:   "images",
+		Short: "Manage engine images",
 	}
 
-	cmd.AddCommand(newPluginsListCmd())
-	cmd.AddCommand(newPluginsShowCmd())
-	cmd.AddCommand(newPluginsEnableCmd())
-	cmd.AddCommand(newPluginsDisableCmd())
+	cmd.AddCommand(newImagesListCmd())
+	cmd.AddCommand(newImagesShowCmd())
+	cmd.AddCommand(newImagesEnableCmd())
+	cmd.AddCommand(newImagesDisableCmd())
 	// For now install/remove expect manifest JSON files.
-	cmd.AddCommand(newPluginsInstallCmd())
-	cmd.AddCommand(newPluginsRemoveCmd())
+	cmd.AddCommand(newImagesInstallCmd())
+	cmd.AddCommand(newImagesRemoveCmd())
 
 	return cmd
 }
 
-func newPluginsListCmd() *cobra.Command {
+func newImagesListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List installed plugins",
+		Short: "List installed images",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			api, err := clientFromCmd(cmd)
 			if err != nil {
@@ -50,27 +50,27 @@ func newPluginsListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 			defer cancel()
 
-			plugins, err := api.ListPlugins(ctx)
+			images, err := api.ListImages(ctx)
 			if err != nil {
 				return err
 			}
-			if len(plugins) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No plugins installed")
+			if len(images) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No images installed")
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%-20s %-10s %-8s %-10s\n", "NAME", "VERSION", "ENABLED", "RUNTIME")
-			for _, plugin := range plugins {
-				fmt.Fprintf(cmd.OutOrStdout(), "%-20s %-10s %-8t %-10s\n", plugin.Name, plugin.Version, plugin.Enabled, plugin.Runtime)
+			for _, image := range images {
+				fmt.Fprintf(cmd.OutOrStdout(), "%-20s %-10s %-8t %-10s\n", image.Name, image.Version, image.Enabled, image.Runtime)
 			}
 			return nil
 		},
 	}
 }
 
-func newPluginsShowCmd() *cobra.Command {
+func newImagesShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <name>",
-		Short: "Show plugin manifest",
+		Short: "Show image manifest",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			api, err := clientFromCmd(cmd)
@@ -80,12 +80,12 @@ func newPluginsShowCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 			defer cancel()
 
-			manifest, err := api.GetPlugin(ctx, args[0])
+			manifest, err := api.GetImage(ctx, args[0])
 			if err != nil {
 				return err
 			}
 			if manifest == nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Plugin %s not found\n", args[0])
+				fmt.Fprintf(cmd.OutOrStdout(), "Image %s not found\n", args[0])
 				return nil
 			}
 			return encodeAsJSON(cmd.OutOrStdout(), manifest)
@@ -93,35 +93,35 @@ func newPluginsShowCmd() *cobra.Command {
 	}
 }
 
-func newPluginsEnableCmd() *cobra.Command {
+func newImagesEnableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable <name>",
-		Short: "Enable a plugin",
+		Short: "Enable an image",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return togglePlugin(cmd, args[0], true)
+			return toggleImage(cmd, args[0], true)
 		},
 	}
 }
 
-func newPluginsDisableCmd() *cobra.Command {
+func newImagesDisableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable <name>",
-		Short: "Disable a plugin",
+		Short: "Disable an image",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return togglePlugin(cmd, args[0], false)
+			return toggleImage(cmd, args[0], false)
 		},
 	}
 }
 
-func newPluginsInstallCmd() *cobra.Command {
+func newImagesInstallCmd() *cobra.Command {
 	var manifestPath string
 	var manifestURL string
 
 	cmd := &cobra.Command{
 		Use:   "install [manifest]",
-		Short: "Install a plugin from manifest JSON (file path or URL)",
+		Short: "Install an image from manifest JSON (file path or URL)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Allow positional arg as shorthand for --manifest or --url
 			if len(args) == 1 {
@@ -231,19 +231,19 @@ func newPluginsInstallCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()
 
-			return api.InstallPlugin(ctx, manifest)
+			return api.InstallImage(ctx, manifest)
 		},
 	}
 
-	cmd.Flags().StringVar(&manifestPath, "manifest", "", "Path to plugin manifest JSON")
-	cmd.Flags().StringVar(&manifestURL, "url", "", "URL to plugin manifest JSON")
+	cmd.Flags().StringVar(&manifestPath, "manifest", "", "Path to image manifest JSON")
+	cmd.Flags().StringVar(&manifestURL, "url", "", "URL to image manifest JSON")
 	return cmd
 }
 
-func newPluginsRemoveCmd() *cobra.Command {
+func newImagesRemoveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Remove an installed plugin",
+		Short: "Remove an installed image",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			api, err := clientFromCmd(cmd)
@@ -253,7 +253,7 @@ func newPluginsRemoveCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 			defer cancel()
 
-			return api.RemovePlugin(ctx, args[0])
+			return api.RemoveImage(ctx, args[0])
 		},
 	}
 }
@@ -296,7 +296,7 @@ func cleanToken(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func togglePlugin(cmd *cobra.Command, name string, enabled bool) error {
+func toggleImage(cmd *cobra.Command, name string, enabled bool) error {
 	api, err := clientFromCmd(cmd)
 	if err != nil {
 		return err
@@ -304,13 +304,13 @@ func togglePlugin(cmd *cobra.Command, name string, enabled bool) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 	defer cancel()
 
-	if err := api.SetPluginEnabled(ctx, name, enabled); err != nil {
+	if err := api.SetImageEnabled(ctx, name, enabled); err != nil {
 		return err
 	}
 	state := "disabled"
 	if enabled {
 		state = "enabled"
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Plugin %s %s\n", name, state)
+	fmt.Fprintf(cmd.OutOrStdout(), "Image %s %s\n", name, state)
 	return nil
 }

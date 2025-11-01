@@ -232,7 +232,7 @@ func newVMsCreateCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 			defer cancel()
 
-			manifest, err := api.DescribePlugin(ctx, pluginName)
+			manifest, err := api.DescribeImage(ctx, pluginName)
 			if err != nil {
 				return err
 			}
@@ -253,22 +253,6 @@ func newVMsCreateCmd() *cobra.Command {
 			}
 			if strings.TrimSpace(runtimeName) == "" {
 				return fmt.Errorf("plugin %s does not define a runtime", pluginName)
-			}
-
-			cpu := cpuFlag
-			if cfg != nil && cfg.Resources.CPUCores > 0 {
-				cpu = cfg.Resources.CPUCores
-			}
-			if cpu <= 0 {
-				cpu = 2
-			}
-
-			mem := memFlag
-			if cfg != nil && cfg.Resources.MemoryMB > 0 {
-				mem = cfg.Resources.MemoryMB
-			}
-			if mem <= 0 {
-				mem = 2048
 			}
 
 			kernelExtra := strings.TrimSpace(kernelFlag)
@@ -295,21 +279,81 @@ func newVMsCreateCmd() *cobra.Command {
 				return err
 			}
 
+			// Read new override flags
+			envFlags, err := cmd.Flags().GetStringSlice("env")
+			if err != nil {
+				return err
+			}
+			portFlags, err := cmd.Flags().GetStringSlice("port")
+			if err != nil {
+				return err
+			}
+
+			// Build Overrides struct
+			var overrides vmconfig.Overrides
+			if cpuFlag > 0 {
+				overrides.CPUCores = &cpuFlag
+			}
+			if memFlag > 0 {
+				overrides.MemoryMB = &memFlag
+			}
+
+			// Parse environment variables from KEY=VALUE format
+			if len(envFlags) > 0 {
+				overrides.Env = make(map[string]string)
+				for _, e := range envFlags {
+					parts := strings.SplitN(e, "=", 2)
+					if len(parts) == 2 {
+						overrides.Env[parts[0]] = parts[1]
+					} else {
+						return fmt.Errorf("invalid env format %q, expected KEY=VALUE", e)
+					}
+				}
+			}
+
+			// Parse port exposures from PORT or HOST_PORT:CONTAINER_PORT format
+			if len(portFlags) > 0 {
+				overrides.ExposePorts = make([]vmconfig.Expose, 0, len(portFlags))
+				for _, p := range portFlags {
+					var expose vmconfig.Expose
+					if strings.Contains(p, ":") {
+						parts := strings.SplitN(p, ":", 2)
+						hostPort, err := strconv.Atoi(parts[0])
+						if err != nil {
+							return fmt.Errorf("invalid host port in %q: %w", p, err)
+						}
+						containerPort, err := strconv.Atoi(parts[1])
+						if err != nil {
+							return fmt.Errorf("invalid container port in %q: %w", p, err)
+						}
+						expose.HostPort = hostPort
+						expose.Port = containerPort
+					} else {
+						port, err := strconv.Atoi(p)
+						if err != nil {
+							return fmt.Errorf("invalid port %q: %w", p, err)
+						}
+						expose.Port = port
+						expose.HostPort = port
+					}
+					expose.Protocol = "tcp" // default to TCP
+					overrides.ExposePorts = append(overrides.ExposePorts, expose)
+				}
+			}
+
 			req := client.CreateVMRequest{
 				Name:          args[0],
 				Plugin:        pluginName,
 				Runtime:       runtimeName,
-				CPUCores:      cpu,
-				MemoryMB:      mem,
 				KernelCmdline: kernelExtra,
 				APIHost:       apiHost,
 				APIPort:       apiPort,
+				Overrides:     overrides,
 			}
 			if cfg != nil {
 				cfgClone := cfg.Clone()
 				cfgClone.Plugin = pluginName
 				cfgClone.Runtime = runtimeName
-				cfgClone.Resources = vmconfig.Resources{CPUCores: cpu, MemoryMB: mem}
 				cfgClone.KernelCmdline = kernelExtra
 				cfgClone.API = vmconfig.API{Host: apiHost, Port: apiPort}
 
@@ -349,7 +393,6 @@ func newVMsCreateCmd() *cobra.Command {
 						Plugin:        pluginName,
 						Runtime:       runtimeName,
 						KernelCmdline: kernelExtra,
-						Resources:     vmconfig.Resources{CPUCores: cpu, MemoryMB: mem},
 						API:           vmconfig.API{Host: apiHost, Port: apiPort},
 					}
 					// Attach manifest to embed device allowlists/passthroughs
@@ -393,8 +436,10 @@ func newVMsCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("runtime", "", "Runtime type to launch (derived from plugin or config if omitted)")
-	cmd.Flags().Int("cpu", 2, "Number of virtual CPU cores")
-	cmd.Flags().Int("memory", 2048, "Memory (MB)")
+	cmd.Flags().Int("cpu", 0, "Number of virtual CPU cores (overrides manifest default)")
+	cmd.Flags().Int("memory", 0, "Memory in MB (overrides manifest default)")
+	cmd.Flags().StringSlice("env", nil, "Environment variables in KEY=VALUE format (repeatable, overrides manifest defaults)")
+	cmd.Flags().StringSlice("port", nil, "Expose ports in format PORT or HOST_PORT:CONTAINER_PORT (repeatable)")
 	cmd.Flags().String("kernel-cmdline", "", "Additional kernel cmdline parameters")
 	cmd.Flags().String("kernel", "", "Override kernel image path (vmlinux)")
 	cmd.Flags().String("initramfs", "", "Override initramfs image path (.cpio.gz)")

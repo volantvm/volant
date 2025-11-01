@@ -1,4 +1,9 @@
-# Security, Limits, and Failure Modes
+---
+title: "Security, Limits, and Failure Modes"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 ## Security Model
 

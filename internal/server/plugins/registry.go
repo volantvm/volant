@@ -19,11 +19,11 @@ import (
 // Registry manages plugin manifests at runtime.
 type Registry struct {
 	mu        sync.RWMutex
-	backend   db.PluginRepository
+	backend   db.ImageRepository
 	manifests map[string]pluginspec.Manifest
 }
 
-func NewRegistry(repo db.PluginRepository) *Registry {
+func NewRegistry(repo db.ImageRepository) *Registry {
 	return &Registry{backend: repo, manifests: make(map[string]pluginspec.Manifest)}
 }
 
@@ -99,7 +99,7 @@ func (r *Registry) Persist(ctx context.Context, manifest pluginspec.Manifest, en
 	if err != nil {
 		return err
 	}
-	return r.backend.Upsert(ctx, db.Plugin{
+	return r.backend.Upsert(ctx, db.Image{
 		Name:     manifest.Name,
 		Version:  manifest.Version,
 		Enabled:  enabled,

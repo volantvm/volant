@@ -1,4 +1,9 @@
-# Security Policy
+---
+title: "Security Policy"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 We take security seriously.
 

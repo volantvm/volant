@@ -1,6 +1,11 @@
-# VFIO API reference (overview)
+---
+title: "VFIO API reference (overview)"
+author: "VolantVM"
+date: "2025-11-01"
+---
 
-Ground truth endpoints are defined in internal/server/httpapi/httpapi.go and the OpenAPI generator. For full, machine-readable detail, generate docs/api-reference/openapi.json via `make openapi-export`.
+
+Ground truth endpoints are defined in internal/server/httpapi/httpapi.go and the OpenAPI generator. For full, machine-readable detail, generate docs/6_reference/api/openapi.json via `make openapi-export`.
 
 ## Endpoints (all under /api/v1/vfio)
 

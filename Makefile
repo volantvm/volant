@@ -97,8 +97,8 @@ build-openapi-export: ## Build the openapi-export utility
 	$(GO) build -o $(BIN_DIR)/openapi-export ./cmd/openapi-export
 
 .PHONY: openapi-export
-openapi-export: build-openapi-export ## Generate OpenAPI JSON to docs/api-reference/openapi.json
-\t$(BIN_DIR)/openapi-export -server https://docs.volantvm.com -output docs/api-reference/openapi.json
+openapi-export: build-openapi-export ## Generate OpenAPI JSON to docs/6_reference/api/openapi.json
+\t$(BIN_DIR)/openapi-export -server https://docs.volantvm.com -output docs/6_reference/api/openapi.json
 
 .PHONY: install
 install: build ## Install core binaries into INSTALL_DIR (default: /usr/local/bin)

@@ -24,7 +24,7 @@ func newRootCmd() *cobra.Command {
 
 Core commands:
   vms       Manage microVMs
-  plugins   Install/remove plugin manifests
+  images    Install/remove image manifests
   setup     Helper for host networking/service configuration
   console   Inspect or attach to VM consoles
 `,
@@ -37,7 +37,7 @@ Core commands:
 
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newVMsCmd())
-	cmd.AddCommand(newPluginsCmd())
+	cmd.AddCommand(newImagesCmd())
 	cmd.AddCommand(newSetupCmd())
 	cmd.AddCommand(newDeploymentsCmd())
 	return cmd

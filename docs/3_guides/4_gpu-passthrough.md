@@ -1,4 +1,9 @@
-# GPU Passthrough (VFIO)
+---
+title: "GPU Passthrough (VFIO)"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 This guide is grounded in the implemented VFIO API and device manager:
 - internal/server/httpapi/httpapi.go (/api/v1/vfio/*)
@@ -39,7 +44,7 @@ curl -sX POST :8080/api/v1/vfio/devices/bind \
  -d '{"pci_addresses":["0000:01:00.0"]}'
 ```
 
-3) Reference in plugin manifest under devices:
+3) Reference in image manifest under devices:
 ```json
 {
   "devices": {
@@ -49,7 +54,7 @@ curl -sX POST :8080/api/v1/vfio/devices/bind \
 }
 ```
 
-4) Create VM with that plugin and start it.
+4) Create VM with that image and start it.
 
 5) To unbind later:
 ```bash

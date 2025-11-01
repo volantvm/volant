@@ -1,8 +1,13 @@
-# Networking guide
+---
+title: "Networking guide"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Ground truth: internal/server/orchestrator/orchestrator.go (resolveNetworkConfig, needsIPAllocation, needsTapDevice), internal/server/orchestrator/network/{bridge.go,noop.go}, internal/setup/setup.go.
 
-Volant supports three network modes via the plugin manifest (or per‑VM config override):
+Volant supports three network modes via the image manifest (or per-VM config override):
 - bridged (default)
 - vsock
 - dhcp

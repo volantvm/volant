@@ -1,4 +1,9 @@
-# Installation
+---
+title: "Installation"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 This guide reflects the actual installer and setup logic in this repository.
 
@@ -18,7 +23,7 @@ The endpoint points to the same script hosted in this repository:
 
 The script will:
 - Download Volant binaries (volar, volantd, kestrel) from GitHub Releases
-- Download kernel artifacts: bzImage (from Volant release) and vmlinux (from Cloud Hypervisor)
+- Download kernels: bzImage (compressed) and vmlinux (uncompressed ELF) from Volant releases - both contain the same embedded kestrel + init
 - Install to /usr/local/bin and /var/lib/volant/kernel
 - Optionally run `sudo volar setup` (recommended)
 

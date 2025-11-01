@@ -67,14 +67,16 @@ type CreateVMRequest struct {
 	Name              string
 	Plugin            string
 	Runtime           string
-	CPUCores          int
-	MemoryMB          int
+	CPUCores          int // DEPRECATED: Use Overrides.CPUCores instead
+	MemoryMB          int // DEPRECATED: Use Overrides.MemoryMB instead
 	KernelCmdlineHint string
 	Manifest          *pluginspec.Manifest
 	APIHost           string
 	APIPort           string
 	Config            *vmconfig.Config
 	GroupID           *int64
+	// Overrides allows runtime-specific configuration that takes precedence over manifest defaults
+	Overrides         vmconfig.Overrides
 }
 
 // Deployment represents a managed group of VM replicas.
@@ -427,33 +429,59 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 
 	additionalDisks := buildAdditionalDisks(req.Manifest)
 
+	// Build configuration using manifest defaults + runtime overrides
 	configToStore := vmconfig.Config{}
 	if req.Config != nil {
+		// Use provided config directly (for backwards compatibility)
 		configToStore = req.Config.Clone()
+		configToStore.Plugin = pluginName
+		configToStore.Runtime = req.Runtime
+	} else if manifestForConfig != nil {
+		// Use new merge logic: apply overrides on top of manifest defaults
+		overrides := req.Overrides
+
+		// Support legacy CPUCores/MemoryMB fields for backwards compatibility
+		if req.CPUCores > 0 && overrides.CPUCores == nil {
+			overrides.CPUCores = &req.CPUCores
+		}
+		if req.MemoryMB > 0 && overrides.MemoryMB == nil {
+			overrides.MemoryMB = &req.MemoryMB
+		}
+
+		var err error
+		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, overrides, pluginName, req.Runtime)
+		if err != nil {
+			e.rollbackCreate(ctx, vmRecord)
+			return nil, fmt.Errorf("build vm config: %w", err)
+		}
+	} else {
+		// No manifest or config provided - use system defaults
+		configToStore.Plugin = pluginName
+		configToStore.Runtime = req.Runtime
+		configToStore.Resources = vmconfig.Resources{
+			CPUCores: vmRecord.CPUCores,
+			MemoryMB: vmRecord.MemoryMB,
+		}
 	}
-	configToStore.Plugin = pluginName
-	configToStore.Runtime = req.Runtime
+
+	// Apply kernel cmdline hint
 	extraCmdline := strings.TrimSpace(req.KernelCmdlineHint)
 	if extraCmdline == "" && req.Config != nil {
 		extraCmdline = strings.TrimSpace(req.Config.KernelCmdline)
 	}
-	configToStore.KernelCmdline = extraCmdline
-	configToStore.Resources = vmconfig.Resources{
-		CPUCores: vmRecord.CPUCores,
-		MemoryMB: vmRecord.MemoryMB,
+	if extraCmdline != "" {
+		configToStore.KernelCmdline = extraCmdline
 	}
+
+	// Ensure API endpoints are set
 	configToStore.API = vmconfig.API{
 		Host: apiHost,
 		Port: apiPort,
 	}
-	if configToStore.Manifest == nil && manifestForConfig != nil {
-		manifestCopy := *manifestForConfig
-		configToStore.Manifest = &manifestCopy
-	} else if configToStore.Manifest != nil {
-		manifestCopy := *configToStore.Manifest
-		manifestCopy.Normalize()
-		configToStore.Manifest = &manifestCopy
-	}
+
+	// Ensure resources match the VM record (in case they weren't set via overrides)
+	configToStore.Resources.CPUCores = vmRecord.CPUCores
+	configToStore.Resources.MemoryMB = vmRecord.MemoryMB
 
 	var seedDisk *runtime.Disk
 	var cloudInitRecord *db.VMCloudInit
@@ -1789,7 +1817,7 @@ func (e *engine) normalizeDeploymentConfig(ctx context.Context, cfg vmconfig.Con
 	// If plugin is specified but manifest is missing, load manifest from installed plugin
 	pluginName := strings.TrimSpace(clone.Plugin)
 	if pluginName != "" && clone.Manifest == nil {
-		plugin, err := e.store.Queries().Plugins().GetByName(ctx, pluginName)
+		plugin, err := e.store.Queries().Images().GetByName(ctx, pluginName)
 		if err != nil {
 			return vmconfig.Config{}, fmt.Errorf("lookup plugin %s: %w", pluginName, err)
 		}

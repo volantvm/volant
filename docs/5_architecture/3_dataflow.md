@@ -1,4 +1,9 @@
-# Data Flow Deep Dive
+---
+title: "Data Flow Deep Dive"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 This page traces the request paths and artifacts through the system.
 
@@ -24,7 +29,7 @@ This page traces the request paths and artifacts through the system.
 
 3) Cloud Hypervisor Launch
    - Code: internal/server/orchestrator/cloudhypervisor/launcher.go:Launch
-   - Stages kernel (override > vmlinux|bzImage), downloads initramfs/rootfs with sha256, assembles args and starts the process.
+   - Stages kernel (override > bzImage > vmlinux), downloads initramfs/rootfs with sha256, assembles args and starts the process.
 
 4) Agent Boot
    - Decodes manifest, starts workload, exposes APIs.

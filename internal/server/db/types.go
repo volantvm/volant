@@ -51,9 +51,9 @@ type VMGroup struct {
 	UpdatedAt  time.Time
 }
 
-type PluginArtifact struct {
+type ImageArtifact struct {
 	ID           int64
-	PluginName   string
+	ImageName    string
 	Version      string
 	ArtifactName string
 	Kind         string
@@ -118,7 +118,7 @@ type Store interface {
 	WithTx(ctx context.Context, fn func(Queries) error) error
 }
 
-type Plugin struct {
+type Image struct {
 	ID          int64
 	Name        string
 	Version     string
@@ -128,10 +128,10 @@ type Plugin struct {
 	UpdatedAt   time.Time
 }
 
-type PluginRepository interface {
-	Upsert(ctx context.Context, plugin Plugin) error
-	List(ctx context.Context) ([]Plugin, error)
-	GetByName(ctx context.Context, name string) (*Plugin, error)
+type ImageRepository interface {
+	Upsert(ctx context.Context, image Image) error
+	List(ctx context.Context) ([]Image, error)
+	GetByName(ctx context.Context, name string) (*Image, error)
 	SetEnabled(ctx context.Context, name string, enabled bool) error
 	Delete(ctx context.Context, name string) error
 }
@@ -141,10 +141,10 @@ type PluginRepository interface {
 type Queries interface {
 	VirtualMachines() VMRepository
 	IPAllocations() IPRepository
-	Plugins() PluginRepository
+	Images() ImageRepository
 	VMConfigs() VMConfigRepository
 	VMGroups() VMGroupRepository
-	PluginArtifacts() PluginArtifactRepository
+	ImageArtifacts() ImageArtifactRepository
 	VMCloudInit() VMCloudInitRepository
 }
 
@@ -179,13 +179,13 @@ type VMGroupRepository interface {
 	List(ctx context.Context) ([]VMGroup, error)
 }
 
-type PluginArtifactRepository interface {
-	Upsert(ctx context.Context, artifact PluginArtifact) error
-	ListByPlugin(ctx context.Context, plugin string) ([]PluginArtifact, error)
-	ListByPluginVersion(ctx context.Context, plugin, version string) ([]PluginArtifact, error)
-	Get(ctx context.Context, plugin, version, artifactName string) (*PluginArtifact, error)
-	DeleteByPluginVersion(ctx context.Context, plugin, version string) error
-	DeleteByPlugin(ctx context.Context, plugin string) error
+type ImageArtifactRepository interface {
+	Upsert(ctx context.Context, artifact ImageArtifact) error
+	ListByImage(ctx context.Context, image string) ([]ImageArtifact, error)
+	ListByImageVersion(ctx context.Context, image, version string) ([]ImageArtifact, error)
+	Get(ctx context.Context, image, version, artifactName string) (*ImageArtifact, error)
+	DeleteByImageVersion(ctx context.Context, image, version string) error
+	DeleteByImage(ctx context.Context, image string) error
 }
 
 type VMCloudInitRepository interface {

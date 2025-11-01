@@ -32,11 +32,11 @@
 Volant lets you spin up fully isolated microVMs as easily as running a container — with real kernels, VFIO passthrough, and cloud-init built in.
 
 
-Volant turns microVMs into a first-class runtime surface. The project ships a control plane, CLI, and agent that speak a common plugin manifest so teams can run secure, stateful workloads without stitching together networking, scheduling, and lifecycle plumbing themselves.
+Volant turns microVMs into a first-class runtime surface. The project ships a control plane, CLI, and agent that speak a common image manifest so teams can run secure, stateful workloads without stitching together networking, scheduling, and lifecycle plumbing themselves.
 
-Runtime-specific behavior lives in signed manifests and their associated artifacts. The core engine stays lean while plugin authors ship the kernels/initramfs overlays and workload processes their runtime requires. Operators decide which manifests to install and must reference one whenever a VM is created.
+Runtime-specific behavior lives in signed manifests and their associated artifacts. The core engine stays lean while image authors ship the kernels/initramfs overlays and workload processes their runtime requires. Operators decide which manifests to install and must reference one whenever a VM is created.
 
-Together with fledge — the artifact builder — Volant provides a complete solution for building and deploying microVM's with custom applications embedded in initramfs, or with the regular OCI images we are familiar with.
+Together with fledge — the artifact builder — Volant provides a complete solution for building and deploying microVMs with custom applications embedded in initramfs, or with the regular OCI images we are familiar with.
 
 Cloud-init support makes Volant ideal for dev sandboxes, while VFIO passthrough allows for isolation of GPU and AI workloads.
 
@@ -46,7 +46,7 @@ Volant ships with sensible defaults out of the box, lowering the barrier to entr
 
 However, Volant is built to be modular, scriptable and configurable beyond those defaults, and advanced users can customize it to their own needs.
 
-For instance, the Kestrel agent acts as a robust PID1 and is responsible for setting up the guest environment in multiple scenarios, and also acts as a secure proxy to workloads inside network-isolated VM's over vsock, providing a frictionless path to maximum isolation.
+For instance, the Kestrel agent acts as a robust PID1 and is responsible for setting up the guest environment in multiple scenarios, and also acts as a secure proxy to workloads inside network-isolated VMs over vsock, providing a frictionless path to maximum isolation.
 
 If you require more fine-grained control, it is possible to override the kernel paths and the fledge artifact builder has configuration settings for using your own init. Refer to the documentation for more details.
 
@@ -57,10 +57,10 @@ If you require more fine-grained control, it is possible to override the kernel 
 Volant provides:
 
 - **`volantd`** — Control plane (SQLite registry + VM orchestration)
-- **`volar`** — CLI for managing VMs and plugins
+- **`volar`** — CLI for managing VMs and images
 - **`kestrel`** — In-guest agent & init (PID 1)
 
-- **[`fledge`](https://github.com/volantvm/fledge)** — Plugin builder (OCI images → bootable artifacts)
+- **[`fledge`](https://github.com/volantvm/fledge)** — Image builder (OCI images → bootable artifacts)
 
 **Two paths, same workflow**:
 
@@ -96,12 +96,12 @@ curl -fsSL https://get.volantvm.com | bash -s -- --skip-setup
 
 ---
 
-### 2. Install a pre-built plugin
+### 2. Install a pre-built image
 
-Let’s start with a Caddy initramfs plugin [(initramfs-plugin-example)](https://github.com/volantvm/initramfs-plugin-example)
+Let's start with a Caddy initramfs image [(initramfs-plugin-example)](https://github.com/volantvm/initramfs-plugin-example)
 
 ```bash
-volar plugins install --manifest \
+volar images install --manifest \
   https://github.com/volantvm/initramfs-plugin-example/releases/latest/download/caddy.json
 ```
 
@@ -112,7 +112,7 @@ volar plugins install --manifest \
 volar vms create web --plugin caddy --cpu 2 --memory 512
 ```
 
-Check it’s alive:
+Check it's alive:
 ```bash
 curl 192.168.127.10
 # → Hello from Caddy in a Volant microVM! 🚀
@@ -124,7 +124,7 @@ curl 192.168.127.10
 
 This example runs **NGINX** directly from the official Docker image:
 ```bash
-volar plugins install --manifest \
+volar images install --manifest \
   https://github.com/volantvm/oci-plugin-example/releases/latest/download/nginx.json
 
 volar vms create my-nginx --plugin nginx --cpu 1 --memory 1024
@@ -155,13 +155,13 @@ volar deployments create web-cluster \
 
 ---
 
-**Done** — you’ve just deployed a replicated microVM cluster with real kernel isolation, no YAMLs, and zero boilerplate.
+**Done** — you've just deployed a replicated microVM cluster with real kernel isolation, no YAMLs, and zero boilerplate.
 
 
 
-### Build Your Own Plugin
+### Build Your Own Images
 
-Use **[fledge](https://github.com/volantvm/fledge)** to build custom plugins from OCI images or static binaries.
+Use **[fledge](https://github.com/volantvm/fledge)** to build custom images from OCI images or static binaries.
 
 **Examples**:
 - [initramfs-plugin-example](https://github.com/volantvm/initramfs-plugin-example) — Caddy web server (fast boot, minimal size)
@@ -204,17 +204,19 @@ Use **[fledge](https://github.com/volantvm/fledge)** to build custom plugins fro
 │  ┌▼──┐   ┌▼──┐   ┌▼──┐   ┌▼──┐         │
 │  │VM1│   │VM2│   │VM3│   │VMN│         │
 │  │┌──┐   │┌──┐   │┌──┐   │┌──┐         │
-│  │││   │││   │││   │││         │
+│  ││   │││   │││   │││         │
 │  │└──┘   │└──┘   │└──┘   │└──┘         │
 │  └───┘   └───┘   └───┘   └───┘         │
 │   kestrel agents (PID 1)                │
 └─────────────────────────────────────────┘
 ```
 
-**Unified kernel boot**:
-- Defaults to `bzImage` for maximum compatibility
-- Optional `vmlinux` override when needed
-- Both initramfs and rootfs can be supplied; the agent selects the boot path via `volant.boot` (auto | initramfs | rootfs)
+**Kernel and boot**:
+- Each Volant release ships verifiably-built kernels: bzImage (compressed) and vmlinux (uncompressed ELF)
+- Both contain the same embedded initramfs with kestrel agent and C init
+- Embedded init handles both boot paths: stays in initramfs for appliance workloads, or pivots to rootfs for OCI-based workloads
+- bzImage used by default; vmlinux available for power users who need the uncompressed format
+- SHA256 checksums + build provenance attestation for all artifacts
 
 ### Web UI and API
 
@@ -224,10 +226,10 @@ Use **[fledge](https://github.com/volantvm/fledge)** to build custom plugins fro
 - System summary: `GET /api/v1/system/summary`
 - VM list with filters/pagination: `GET /api/v1/vms?status=running&runtime=browser&plugin=caddy&q=web&limit=20&offset=0&sort=created_at&order=desc` (returns `X-Total-Count`)
 - Console WebSocket: `GET ws://<host>/ws/v1/vms/:name/console` (raw serial bridge)
-- Plugin artifacts API:
-  - List: `GET /api/v1/plugins/:plugin/artifacts?version=v1`
-  - Upsert: `POST /api/v1/plugins/:plugin/artifacts`
-  - Delete: `DELETE /api/v1/plugins/:plugin/artifacts?version=v1`
+- Image artifacts API:
+  - List: `GET /api/v1/images/:image/artifacts?version=v1`
+  - Upsert: `POST /api/v1/images/:image/artifacts`
+  - Delete: `DELETE /api/v1/images/:image/artifacts?version=v1`
 
 VM-level device overrides (VFIO):
 
@@ -244,12 +246,12 @@ Apply with `PATCH /api/v1/vms/:name/config` or via `volar` config patching.
 
 ## Use Cases
 
--  **Secure multi-tenancy** — True hardware isolation
--  **Edge computing** — Minimal footprint, fast boot
--  **CI/CD** — Ephemeral test environments
--  **Development** — Local Kubernetes-style orchestration
--  **High-density workloads** — 50-100 VMs per host
--  **AI/ML** Run machine learning workloads in isolation
+- **Secure multi-tenancy** — True hardware isolation
+- **Edge computing** — Minimal footprint, fast boot
+- **CI/CD** — Ephemeral test environments
+- **Development** — Local Kubernetes-style orchestration
+- **High-density workloads** — 50-100 VMs per host
+- **AI/ML** Run machine learning workloads in isolation
 
 ---
 
@@ -262,9 +264,9 @@ Quick links:
 - [Installation Guide](docs/2_getting-started/1_installation.md)
 - [Quick Starts](docs/2_getting-started/2_quick-start-initramfs.md) · [Rootfs](docs/2_getting-started/3_quick-start-rootfs.md)
 - [Networking](docs/3_guides/1_networking.md) · [Cloud-init](docs/3_guides/2_cloud-init.md) · [Deployments](docs/3_guides/3_deployments.md) · [GPU](docs/3_guides/4_gpu-passthrough.md)
-- [Plugin Development](docs/4_plugin-development/1_overview.md) · [Initramfs](docs/4_plugin-development/2_initramfs.md) · [OCI Rootfs](docs/4_plugin-development/3_oci-rootfs.md)
+- [Image Development](docs/4_image-development/1_overview.md) · [Initramfs](docs/4_image-development/2_initramfs.md) · [OCI Rootfs](docs/4_image-development/3_oci-rootfs.md)
 - [Architecture Overview](docs/5_architecture/1_overview.md)
-- [Reference: Manifest](docs/6_reference/1_manifest-schema.md) · [fledge.toml](docs/6_reference/2_fledge-toml.md) · [CLI](docs/6_reference/cli-volar.md) · [OpenAPI](docs/api-reference/openapi.json)
+- [Reference: Manifest](docs/6_reference/1_manifest-schema.md) · [fledge.toml](docs/6_reference/2_fledge-toml.md) · [manifest.toml](docs/6_reference/3_manifest-toml.md) · [CLI](docs/6_reference/cli-volar.md) · [OpenAPI](docs/6_reference/api/openapi.json)
 - [Contributing](docs/7_development/1_contributing.md) · [Security](docs/7_development/2_security.md)
 
 ---
@@ -281,9 +283,9 @@ See [ROADMAP.md](ROADMAP.md) for the full vision.
 
 ## Community
 
--  **GitHub**: [github.com/volantvm/volant](https://github.com/volantvm/volant)
--  **Discord**: *(coming soon)*
--  **Email**: hello@volantvm.com
+- **GitHub**: [github.com/volantvm/volant](https://github.com/volantvm/volant)
+- **Discord**: *(coming soon)*
+- **Email**: hello@volantvm.com
 
 **Contributing**: See [contributing]([docs/7_development/1_contributing.md](https://docs.volantvm.com/contributing-1646061m0))
 

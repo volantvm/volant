@@ -79,7 +79,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 	mcpRespRef, _ := gen.NewSchemaRefForValue(&MCPResponse{}, spec.Components.Schemas)
 	// Phase 3 additions
 	sysSummaryRef, _ := gen.NewSchemaRefForValue(&systemSummaryResponse{}, spec.Components.Schemas)
-	pluginArtifactRef, _ := gen.NewSchemaRefForValue(&db.PluginArtifact{}, spec.Components.Schemas)
+	pluginArtifactRef, _ := gen.NewSchemaRefForValue(&db.ImageArtifact{}, spec.Components.Schemas)
 	upsertArtifactReqRef, _ := gen.NewSchemaRefForValue(&upsertArtifactRequest{}, spec.Components.Schemas)
 	// Events
 	vmEventRef, _ := gen.NewSchemaRefForValue(&orchestratorevents.VMEvent{}, spec.Components.Schemas)
@@ -144,7 +144,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		op.Tags = []string{"status"}
 		op.Responses = openapi3.NewResponses()
 		{
-			resp := openapi3.NewResponse().WithDescription("Counts and plugin info")
+			resp := openapi3.NewResponse().WithDescription("Counts and image info")
 			resp.Content = openapi3.NewContentWithJSONSchemaRef(sysSummaryRef)
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
 		}
@@ -161,7 +161,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		op.Parameters = append(op.Parameters,
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "status", In: openapi3.ParameterInQuery, Description: "Filter by status (repeatable or comma-separated)", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "runtime", In: openapi3.ParameterInQuery, Description: "Filter by runtime", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
-			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "plugin", In: openapi3.ParameterInQuery, Description: "Filter by plugin name", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
+			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "image", In: openapi3.ParameterInQuery, Description: "Filter by image name", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "q", In: openapi3.ParameterInQuery, Description: "Free text search (name, ip, runtime)", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "limit", In: openapi3.ParameterInQuery, Description: "Max items to return", Schema: openapi3.NewSchemaRef("", openapi3.NewIntegerSchema())}},
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "offset", In: openapi3.ParameterInQuery, Description: "Items to skip (for pagination)", Schema: openapi3.NewSchemaRef("", openapi3.NewIntegerSchema())}},
@@ -284,32 +284,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	// /api/v1/plugins
-	pluginListSchema := openapi3.NewSchemaRef("", func() *openapi3.Schema {
-		s := openapi3.NewObjectSchema()
-		s.Properties = map[string]*openapi3.SchemaRef{
-			"plugins": openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}, Items: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}),
-		}
-		return s
-	}())
-	spec.AddOperation("/api/v1/plugins", http.MethodGet, func() *openapi3.Operation {
-		op := openapi3.NewOperation()
-		op.Summary = "List plugin manifests"
-		op.OperationID = "listPlugins"
-		op.Tags = []string{"plugins"}
-		op.Responses = openapi3.NewResponses()
-		{
-			resp := openapi3.NewResponse().WithDescription("Plugin identifiers")
-			resp.Content = openapi3.NewContentWithJSONSchemaRef(pluginListSchema)
-			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
-		}
-		{
-			resp := openapi3.NewResponse().WithDescription("Internal error")
-			resp.Content = openapi3.NewContentWithJSONSchemaRef(errorSchema)
-			op.Responses.Set("500", &openapi3.ResponseRef{Value: resp})
-		}
-		return op
-	}())
+	// /api/v1/images (duplicate definition removed, see lines 576-634)
 
 	// /api/v1/mcp
 	spec.AddOperation("/api/v1/mcp", http.MethodPost, func() *openapi3.Operation {
@@ -479,7 +454,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 	// /api/v1/vms/{name}/openapi
 	spec.AddOperation("/api/v1/vms/{name}/openapi", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Get VM plugin OpenAPI spec"
+		op.Summary = "Get VM image OpenAPI spec"
 		op.OperationID = "getVMOpenAPI"
 		op.Tags = []string{"vm"}
 		op.Parameters = openapi3.Parameters{nameParam}
@@ -573,20 +548,20 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	// /api/v1/plugins
+	// /api/v1/images
 	manifestSchema := openapi3.NewObjectSchema()
-	manifestSchema.Description = "Plugin manifest (see plugin-manifest-v1.json schema)"
-	spec.AddOperation("/api/v1/plugins", http.MethodGet, func() *openapi3.Operation {
+	manifestSchema.Description = "Image manifest (see plugin-manifest-v1.json schema)"
+	spec.AddOperation("/api/v1/images", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "List plugins"
-		op.OperationID = "listPlugins"
-		op.Tags = []string{"plugins"}
+		op.Summary = "List images"
+		op.OperationID = "listImages"
+		op.Tags = []string{"images"}
 		op.Responses = openapi3.NewResponses()
 		{
-			resp := openapi3.NewResponse().WithDescription("List of plugin names")
+			resp := openapi3.NewResponse().WithDescription("List of image names")
 			listSchema := openapi3.NewObjectSchema()
 			listSchema.Properties = map[string]*openapi3.SchemaRef{
-				"plugins": openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}, Items: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}),
+				"images": openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}, Items: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}),
 			}
 			resp.Content = openapi3.NewContentWithJSONSchema(listSchema)
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
@@ -594,51 +569,51 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	spec.AddOperation("/api/v1/plugins", http.MethodPost, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images", http.MethodPost, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Install plugin"
-		op.OperationID = "installPlugin"
-		op.Tags = []string{"plugins"}
+		op.Summary = "Install image"
+		op.OperationID = "installImage"
+		op.Tags = []string{"images"}
 		op.RequestBody = &openapi3.RequestBodyRef{Value: &openapi3.RequestBody{Required: true, Content: openapi3.NewContentWithJSONSchema(manifestSchema)}}
 		op.Responses = openapi3.NewResponses()
-		op.Responses.Set("201", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Plugin installed")})
+		op.Responses.Set("201", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Image installed")})
 		op.Responses.Set("400", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Bad request").WithContent(openapi3.NewContentWithJSONSchemaRef(errorSchema))})
 		return op
 	}())
 
-	pluginParam := &openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "plugin", In: openapi3.ParameterInPath, Required: true, Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}}
-	spec.AddOperation("/api/v1/plugins/{plugin}", http.MethodGet, func() *openapi3.Operation {
+	imageParam := &openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "image", In: openapi3.ParameterInPath, Required: true, Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}}
+	spec.AddOperation("/api/v1/images/{image}", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Get plugin"
-		op.OperationID = "getPlugin"
-		op.Tags = []string{"plugins"}
-		op.Parameters = openapi3.Parameters{pluginParam}
+		op.Summary = "Get image"
+		op.OperationID = "getImage"
+		op.Tags = []string{"images"}
+		op.Parameters = openapi3.Parameters{imageParam}
 		op.Responses = openapi3.NewResponses()
 		{
-			resp := openapi3.NewResponse().WithDescription("Plugin manifest")
+			resp := openapi3.NewResponse().WithDescription("Image manifest")
 			resp.Content = openapi3.NewContentWithJSONSchema(manifestSchema)
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
 		}
 		return op
 	}())
 
-	spec.AddOperation("/api/v1/plugins/{plugin}", http.MethodDelete, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images/{image}", http.MethodDelete, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Remove plugin"
-		op.OperationID = "removePlugin"
-		op.Tags = []string{"plugins"}
-		op.Parameters = openapi3.Parameters{pluginParam}
+		op.Summary = "Remove image"
+		op.OperationID = "removeImage"
+		op.Tags = []string{"images"}
+		op.Parameters = openapi3.Parameters{imageParam}
 		op.Responses = openapi3.NewResponses()
-		op.Responses.Set("204", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Plugin removed")})
+		op.Responses.Set("204", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Image removed")})
 		return op
 	}())
 
-	spec.AddOperation("/api/v1/plugins/{plugin}/enabled", http.MethodPost, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images/{image}/enabled", http.MethodPost, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Set plugin enabled status"
-		op.OperationID = "setPluginEnabled"
-		op.Tags = []string{"plugins"}
-		op.Parameters = openapi3.Parameters{pluginParam}
+		op.Summary = "Set image enabled status"
+		op.OperationID = "setImageEnabled"
+		op.Tags = []string{"images"}
+		op.Parameters = openapi3.Parameters{imageParam}
 		enabledSchema := openapi3.NewObjectSchema()
 		enabledSchema.Properties = map[string]*openapi3.SchemaRef{
 			"enabled": openapi3.NewSchemaRef("", openapi3.NewBoolSchema()),
@@ -649,14 +624,14 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	// Plugin artifacts
-	spec.AddOperation("/api/v1/plugins/{plugin}/artifacts", http.MethodGet, func() *openapi3.Operation {
+	// Image artifacts
+	spec.AddOperation("/api/v1/images/{image}/artifacts", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "List plugin artifacts"
-		op.OperationID = "listPluginArtifacts"
-		op.Tags = []string{"plugins", "artifacts"}
+		op.Summary = "List image artifacts"
+		op.OperationID = "listImageArtifacts"
+		op.Tags = []string{"images", "artifacts"}
 		op.Parameters = openapi3.Parameters{
-			pluginParam,
+			imageParam,
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "version", In: openapi3.ParameterInQuery, Description: "Filter by version", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 		}
 		op.Responses = openapi3.NewResponses()
@@ -669,12 +644,12 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	spec.AddOperation("/api/v1/plugins/{plugin}/artifacts", http.MethodPost, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images/{image}/artifacts", http.MethodPost, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Create or update a plugin artifact"
-		op.OperationID = "upsertPluginArtifact"
-		op.Tags = []string{"plugins", "artifacts"}
-		op.Parameters = openapi3.Parameters{pluginParam}
+		op.Summary = "Create or update an image artifact"
+		op.OperationID = "upsertImageArtifact"
+		op.Tags = []string{"images", "artifacts"}
+		op.Parameters = openapi3.Parameters{imageParam}
 		op.RequestBody = &openapi3.RequestBodyRef{Value: &openapi3.RequestBody{Required: true, Content: openapi3.NewContentWithJSONSchemaRef(upsertArtifactReqRef)}}
 		op.Responses = openapi3.NewResponses()
 		op.Responses.Set("201", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Created")})
@@ -682,13 +657,13 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		return op
 	}())
 
-	spec.AddOperation("/api/v1/plugins/{plugin}/artifacts", http.MethodDelete, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images/{image}/artifacts", http.MethodDelete, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Delete plugin artifacts"
-		op.OperationID = "deletePluginArtifacts"
-		op.Tags = []string{"plugins", "artifacts"}
+		op.Summary = "Delete image artifacts"
+		op.OperationID = "deleteImageArtifacts"
+		op.Tags = []string{"images", "artifacts"}
 		op.Parameters = openapi3.Parameters{
-			pluginParam,
+			imageParam,
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "version", In: openapi3.ParameterInQuery, Description: "Delete artifacts for a specific version (optional)", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 		}
 		op.Responses = openapi3.NewResponses()
@@ -697,13 +672,13 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 	}())
 
 	artifactParam := &openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "artifact", In: openapi3.ParameterInPath, Required: true, Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}}
-	spec.AddOperation("/api/v1/plugins/{plugin}/artifacts/{artifact}", http.MethodGet, func() *openapi3.Operation {
+	spec.AddOperation("/api/v1/images/{image}/artifacts/{artifact}", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
-		op.Summary = "Get a plugin artifact by name and version"
-		op.OperationID = "getPluginArtifact"
-		op.Tags = []string{"plugins", "artifacts"}
+		op.Summary = "Get an image artifact by name and version"
+		op.OperationID = "getImageArtifact"
+		op.Tags = []string{"images", "artifacts"}
 		op.Parameters = openapi3.Parameters{
-			pluginParam,
+			imageParam,
 			artifactParam,
 			&openapi3.ParameterRef{Value: &openapi3.Parameter{Name: "version", In: openapi3.ParameterInQuery, Required: true, Description: "Artifact version", Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema())}},
 		}

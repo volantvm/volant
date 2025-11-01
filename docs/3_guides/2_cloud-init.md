@@ -1,8 +1,13 @@
-# Cloud-init guide
+---
+title: "Cloud-init guide"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Ground truth: internal/server/orchestrator/cloudinit/builder.go and orchestrator.go (prepareCloudInitSeed, mergeCloudInit).
 
-Volant supports NoCloud datasource via a seed image attached as a read‑only disk. You can provide cloud-init documents through the plugin manifest or per‑VM config. The orchestrator merges them and builds a CIDATA image.
+Volant supports NoCloud datasource via a seed image attached as a read-only disk. You can provide cloud-init documents through the image manifest or per-VM config. The orchestrator merges them and builds a CIDATA image.
 
 ## Documents
 
@@ -18,7 +23,7 @@ Effectively: override wins. The orchestrator uses mergeCloudInit(base, override)
 - If override content/path set or inline=true, override replaces base for that document.
 - Otherwise base is kept.
 
-Base comes from the plugin manifest (if any). Override comes from per‑VM config.
+Base comes from the image manifest (if any). Override comes from per-VM config.
 
 ## Seed build
 

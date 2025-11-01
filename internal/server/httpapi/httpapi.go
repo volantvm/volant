@@ -120,7 +120,7 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, plug
 			vms.POST(":name/restart", api.restartVM)
 			vms.GET(":name/openapi", api.getVMOpenAPI)
 			vms.Any(":name/agent/*path", api.proxyAgent)
-			vms.POST(":name/actions/:plugin/:action", api.postVMPluginAction)
+			vms.POST(":name/actions/:image/:action", api.postVMImageAction)
 		}
 
 		deployments := v1.Group("/deployments")
@@ -132,21 +132,21 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, plug
 			deployments.DELETE(":name", api.deleteDeployment)
 		}
 
-		pluginsGroup := v1.Group("/plugins")
+		imagesGroup := v1.Group("/images")
 		{
-			pluginsGroup.GET("", api.listPlugins)
-			pluginsGroup.POST("", api.installPlugin)
-			pluginsGroup.GET(":plugin", api.describePlugin)
-			pluginsGroup.GET(":plugin/manifest", api.getPluginManifest)
-			pluginsGroup.DELETE(":plugin", api.removePlugin)
-			pluginsGroup.POST(":plugin/enabled", api.setPluginEnabled)
-			pluginsGroup.POST(":plugin/actions/:action", api.postPluginAction)
+			imagesGroup.GET("", api.listImages)
+			imagesGroup.POST("", api.installImage)
+			imagesGroup.GET(":image", api.describeImage)
+			imagesGroup.GET(":image/manifest", api.getImageManifest)
+			imagesGroup.DELETE(":image", api.removeImage)
+			imagesGroup.POST(":image/enabled", api.setImageEnabled)
+			imagesGroup.POST(":image/actions/:action", api.postImageAction)
 
-			// Plugin artifacts API
-			pluginsGroup.GET(":plugin/artifacts", api.listPluginArtifacts)
-			pluginsGroup.POST(":plugin/artifacts", api.upsertPluginArtifact)
-			pluginsGroup.DELETE(":plugin/artifacts", api.deletePluginArtifacts)
-			pluginsGroup.GET(":plugin/artifacts/:artifact", api.getPluginArtifact)
+			// Image artifacts API
+			imagesGroup.GET(":image/artifacts", api.listImageArtifacts)
+			imagesGroup.POST(":image/artifacts", api.upsertImageArtifact)
+			imagesGroup.DELETE(":image/artifacts", api.deleteImageArtifacts)
+			imagesGroup.GET(":image/artifacts/:artifact", api.getImageArtifact)
 		}
 
 		events := v1.Group("/events")
@@ -188,7 +188,7 @@ func loadStoredPlugins(engine orchestrator.Engine, logger *slog.Logger, registry
 		return nil
 	}
 	return store.WithTx(context.Background(), func(q db.Queries) error {
-		entries, err := q.Plugins().List(context.Background())
+		entries, err := q.Images().List(context.Background())
 		if err != nil {
 			return err
 		}
@@ -389,15 +389,14 @@ type deploymentResponse struct {
 }
 
 type createVMRequest struct {
-	Name          string           `json:"name" binding:"required"`
-	Plugin        string           `json:"plugin"`
-	Runtime       string           `json:"runtime"`
-	CPUCores      int              `json:"cpu_cores"`
-	MemoryMB      int              `json:"memory_mb"`
-	KernelCmdline string           `json:"kernel_cmdline"`
-	APIHost       string           `json:"api_host"`
-	APIPort       string           `json:"api_port"`
-	Config        *vmconfig.Config `json:"config,omitempty"`
+	Name          string              `json:"name" binding:"required"`
+	Plugin        string              `json:"plugin"`
+	Runtime       string              `json:"runtime"`
+	KernelCmdline string              `json:"kernel_cmdline"`
+	APIHost       string              `json:"api_host"`
+	APIPort       string              `json:"api_port"`
+	Config        *vmconfig.Config    `json:"config,omitempty"`
+	Overrides     vmconfig.Overrides  `json:"overrides,omitempty"`
 }
 
 type vfioDeviceInfoRequest struct {
@@ -786,21 +785,6 @@ func (api *apiServer) createVM(c *gin.Context) {
 		return
 	}
 
-	cpu := req.CPUCores
-	if req.Config != nil && req.Config.Resources.CPUCores > 0 {
-		cpu = req.Config.Resources.CPUCores
-	}
-	if cpu <= 0 {
-		cpu = 2
-	}
-	mem := req.MemoryMB
-	if req.Config != nil && req.Config.Resources.MemoryMB > 0 {
-		mem = req.Config.Resources.MemoryMB
-	}
-	if mem <= 0 {
-		mem = 2048
-	}
-
 	kernelExtra := strings.TrimSpace(req.KernelCmdline)
 	if req.Config != nil && strings.TrimSpace(req.Config.KernelCmdline) != "" {
 		kernelExtra = strings.TrimSpace(req.Config.KernelCmdline)
@@ -822,7 +806,6 @@ func (api *apiServer) createVM(c *gin.Context) {
 		clone := req.Config.Clone()
 		clone.Plugin = pluginName
 		clone.Runtime = runtimeName
-		clone.Resources = vmconfig.Resources{CPUCores: cpu, MemoryMB: mem}
 		clone.KernelCmdline = kernelExtra
 		clone.API = vmconfig.API{Host: apiHost, Port: apiPort}
 		if clone.Manifest == nil {
@@ -840,13 +823,12 @@ func (api *apiServer) createVM(c *gin.Context) {
 		Name:              req.Name,
 		Plugin:            pluginName,
 		Runtime:           runtimeName,
-		CPUCores:          cpu,
-		MemoryMB:          mem,
 		APIHost:           apiHost,
 		APIPort:           apiPort,
 		KernelCmdlineHint: kernelExtra,
 		Manifest:          &manifestCopy,
 		Config:            configClone,
+		Overrides:         req.Overrides,
 	})
 	if err != nil {
 		api.logger.Error("create vm", "vm", req.Name, "error", err)
@@ -1889,22 +1871,22 @@ func statusFromError(err error) int {
 	}
 }
 
-func (api *apiServer) postVMPluginAction(c *gin.Context) {
+func (api *apiServer) postVMImageAction(c *gin.Context) {
 	vmName := c.Param("name")
-	api.dispatchPluginAction(c, vmName)
+	api.dispatchImageAction(c, vmName)
 }
 
-func (api *apiServer) dispatchPluginAction(c *gin.Context, vmName string) {
+func (api *apiServer) dispatchImageAction(c *gin.Context, vmName string) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
-	pluginName := c.Param("plugin")
+	imageName := c.Param("image")
 	actionName := c.Param("action")
-	manifest, action, err := api.plugins.ResolveAction(pluginName, actionName)
+	manifest, action, err := api.plugins.ResolveAction(imageName, actionName)
 	if err != nil {
-		api.logger.Error("resolve plugin action", "plugin", pluginName, "action", actionName, "error", err)
+		api.logger.Error("resolve image action", "image", imageName, "action", actionName, "error", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -1923,7 +1905,7 @@ func (api *apiServer) dispatchPluginAction(c *gin.Context, vmName string) {
 			return
 		}
 		if manifest.Runtime != vm.Runtime {
-			c.JSON(http.StatusConflict, gin.H{"error": "vm runtime does not match plugin"})
+			c.JSON(http.StatusConflict, gin.H{"error": "vm runtime does not match image"})
 			return
 		}
 	}
@@ -1944,9 +1926,9 @@ func (api *apiServer) dispatchPluginAction(c *gin.Context, vmName string) {
 			return
 		}
 	} else {
-		resp, err := api.forwardPluginAction(c.Request.Context(), manifest, method, targetPath, payload)
+		resp, err := api.forwardImageAction(c.Request.Context(), manifest, method, targetPath, payload)
 		if err != nil {
-			api.logger.Error("plugin action forward", "plugin", pluginName, "action", actionName, "error", err)
+			api.logger.Error("image action forward", "image", imageName, "action", actionName, "error", err)
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
@@ -1978,43 +1960,43 @@ func (api *apiServer) resolveVMByName(c *gin.Context, name string) (*db.VM, bool
 	return vm, true
 }
 
-func (api *apiServer) forwardPluginAction(ctx context.Context, manifest pluginspec.Manifest, method, path string, payload map[string]any) (map[string]any, error) {
-	// placeholder for future non-VM plugin action dispatch (e.g. pooled runtimes)
+func (api *apiServer) forwardImageAction(ctx context.Context, manifest pluginspec.Manifest, method, path string, payload map[string]any) (map[string]any, error) {
+	// placeholder for future non-VM image action dispatch (e.g. pooled runtimes)
 	return map[string]any{"status": "accepted"}, nil
 }
 
-func (api *apiServer) listPlugins(c *gin.Context) {
+func (api *apiServer) listImages(c *gin.Context) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
 	names := api.plugins.List()
-	c.JSON(http.StatusOK, gin.H{"plugins": names})
+	c.JSON(http.StatusOK, gin.H{"images": names})
 }
 
-func (api *apiServer) describePlugin(c *gin.Context) {
+func (api *apiServer) describeImage(c *gin.Context) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
-	pluginName := c.Param("plugin")
-	manifest, ok := api.plugins.Get(pluginName)
+	imageName := c.Param("image")
+	manifest, ok := api.plugins.Get(imageName)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "plugin not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
 		return
 	}
 	c.JSON(http.StatusOK, manifest)
 }
 
-func (api *apiServer) postPluginAction(c *gin.Context) {
-	api.dispatchPluginAction(c, "")
+func (api *apiServer) postImageAction(c *gin.Context) {
+	api.dispatchImageAction(c, "")
 }
 
-func (api *apiServer) installPlugin(c *gin.Context) {
+func (api *apiServer) installImage(c *gin.Context) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
@@ -2030,8 +2012,8 @@ func (api *apiServer) installPlugin(c *gin.Context) {
 		return
 	}
 
-	if err := api.persistPluginManifest(c.Request.Context(), manifest, true); err != nil {
-		api.logger.Error("install plugin", "plugin", manifest.Name, "error", err)
+	if err := api.persistImageManifest(c.Request.Context(), manifest, true); err != nil {
+		api.logger.Error("install image", "image", manifest.Name, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -2040,15 +2022,15 @@ func (api *apiServer) installPlugin(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
-func (api *apiServer) removePlugin(c *gin.Context) {
-	name := c.Param("plugin")
+func (api *apiServer) removeImage(c *gin.Context) {
+	name := c.Param("image")
 	if strings.TrimSpace(name) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "plugin name required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image name required"})
 		return
 	}
 
-	if err := api.deletePluginManifest(c.Request.Context(), name); err != nil {
-		api.logger.Error("remove plugin", "plugin", name, "error", err)
+	if err := api.deleteImageManifest(c.Request.Context(), name); err != nil {
+		api.logger.Error("remove image", "image", name, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -2056,13 +2038,13 @@ func (api *apiServer) removePlugin(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (api *apiServer) setPluginEnabled(c *gin.Context) {
+func (api *apiServer) setImageEnabled(c *gin.Context) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
-	name := c.Param("plugin")
+	name := c.Param("image")
 	var payload struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -2071,8 +2053,8 @@ func (api *apiServer) setPluginEnabled(c *gin.Context) {
 		return
 	}
 
-	if err := api.togglePlugin(c.Request.Context(), name, payload.Enabled); err != nil {
-		api.logger.Error("toggle plugin", "plugin", name, "error", err)
+	if err := api.toggleImage(c.Request.Context(), name, payload.Enabled); err != nil {
+		api.logger.Error("toggle image", "image", name, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -2080,7 +2062,7 @@ func (api *apiServer) setPluginEnabled(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func (api *apiServer) persistPluginManifest(ctx context.Context, manifest pluginspec.Manifest, enabled bool) error {
+func (api *apiServer) persistImageManifest(ctx context.Context, manifest pluginspec.Manifest, enabled bool) error {
 	store := api.engine.Store()
 	if store == nil {
 		return fmt.Errorf("store not configured")
@@ -2091,7 +2073,7 @@ func (api *apiServer) persistPluginManifest(ctx context.Context, manifest plugin
 		if err != nil {
 			return err
 		}
-		return q.Plugins().Upsert(ctx, db.Plugin{
+		return q.Images().Upsert(ctx, db.Image{
 			Name:     manifest.Name,
 			Version:  manifest.Version,
 			Enabled:  enabled,
@@ -2100,25 +2082,25 @@ func (api *apiServer) persistPluginManifest(ctx context.Context, manifest plugin
 	})
 }
 
-func (api *apiServer) deletePluginManifest(ctx context.Context, name string) error {
+func (api *apiServer) deleteImageManifest(ctx context.Context, name string) error {
 	store := api.engine.Store()
 	if store == nil {
 		return fmt.Errorf("store not configured")
 	}
 
 	return store.WithTx(ctx, func(q db.Queries) error {
-		return q.Plugins().Delete(ctx, name)
+		return q.Images().Delete(ctx, name)
 	})
 }
 
-func (api *apiServer) togglePlugin(ctx context.Context, name string, enabled bool) error {
+func (api *apiServer) toggleImage(ctx context.Context, name string, enabled bool) error {
 	store := api.engine.Store()
 	if store == nil {
 		return fmt.Errorf("store not configured")
 	}
 
 	return store.WithTx(ctx, func(q db.Queries) error {
-		if err := q.Plugins().SetEnabled(ctx, name, enabled); err != nil {
+		if err := q.Images().SetEnabled(ctx, name, enabled); err != nil {
 			return err
 		}
 
@@ -2182,31 +2164,31 @@ func (api *apiServer) handleManifestAction(ctx context.Context, w http.ResponseW
 	_, _ = w.Write([]byte("manifest action proxy not implemented"))
 }
 
-func (api *apiServer) getPluginManifest(c *gin.Context) {
+func (api *apiServer) getImageManifest(c *gin.Context) {
 	if api.plugins == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "plugin registry unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "image registry unavailable"})
 		return
 	}
 
-	pluginName := c.Param("plugin")
-	manifest, ok := api.plugins.Get(pluginName)
+	imageName := c.Param("image")
+	manifest, ok := api.plugins.Get(imageName)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "plugin not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
 		return
 	}
 	if !manifest.Enabled {
-		c.JSON(http.StatusConflict, gin.H{"error": "plugin disabled"})
+		c.JSON(http.StatusConflict, gin.H{"error": "image disabled"})
 		return
 	}
 	c.JSON(http.StatusOK, manifest)
 }
 
-// Plugin Artifacts API
-// GET /api/v1/plugins/:plugin/artifacts?version=...
-func (api *apiServer) listPluginArtifacts(c *gin.Context) {
-	plugin := strings.TrimSpace(c.Param("plugin"))
-	if plugin == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "plugin name required"})
+// Image Artifacts API
+// GET /api/v1/images/:image/artifacts?version=...
+func (api *apiServer) listImageArtifacts(c *gin.Context) {
+	image := strings.TrimSpace(c.Param("image"))
+	if image == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image name required"})
 		return
 	}
 	store := api.engine.Store()
@@ -2217,29 +2199,29 @@ func (api *apiServer) listPluginArtifacts(c *gin.Context) {
 
 	version := strings.TrimSpace(c.Query("version"))
 	var (
-		result []db.PluginArtifact
+		result []db.ImageArtifact
 		err    error
 	)
 	if version != "" {
-		result, err = store.Queries().PluginArtifacts().ListByPluginVersion(c.Request.Context(), plugin, version)
+		result, err = store.Queries().ImageArtifacts().ListByImageVersion(c.Request.Context(), image, version)
 	} else {
-		result, err = store.Queries().PluginArtifacts().ListByPlugin(c.Request.Context(), plugin)
+		result, err = store.Queries().ImageArtifacts().ListByImage(c.Request.Context(), image)
 	}
 	if err != nil {
-		api.logger.Error("list plugin artifacts", "plugin", plugin, "version", version, "error", err)
+		api.logger.Error("list image artifacts", "image", image, "version", version, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list artifacts"})
 		return
 	}
 	c.JSON(http.StatusOK, result)
 }
 
-// GET /api/v1/plugins/:plugin/artifacts/:artifact?version=...
-func (api *apiServer) getPluginArtifact(c *gin.Context) {
-	plugin := strings.TrimSpace(c.Param("plugin"))
+// GET /api/v1/images/:image/artifacts/:artifact?version=...
+func (api *apiServer) getImageArtifact(c *gin.Context) {
+	image := strings.TrimSpace(c.Param("image"))
 	artifact := strings.TrimSpace(c.Param("artifact"))
 	version := strings.TrimSpace(c.Query("version"))
-	if plugin == "" || artifact == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "plugin and artifact required"})
+	if image == "" || artifact == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image and artifact required"})
 		return
 	}
 	if version == "" {
@@ -2251,9 +2233,9 @@ func (api *apiServer) getPluginArtifact(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "store not configured"})
 		return
 	}
-	rec, err := store.Queries().PluginArtifacts().Get(c.Request.Context(), plugin, version, artifact)
+	rec, err := store.Queries().ImageArtifacts().Get(c.Request.Context(), image, version, artifact)
 	if err != nil {
-		api.logger.Error("get plugin artifact", "plugin", plugin, "artifact", artifact, "version", version, "error", err)
+		api.logger.Error("get image artifact", "image", image, "artifact", artifact, "version", version, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get artifact"})
 		return
 	}
@@ -2275,11 +2257,11 @@ type upsertArtifactRequest struct {
 	SizeBytes    int64  `json:"size_bytes"`
 }
 
-// POST /api/v1/plugins/:plugin/artifacts
-func (api *apiServer) upsertPluginArtifact(c *gin.Context) {
-	plugin := strings.TrimSpace(c.Param("plugin"))
-	if plugin == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "plugin name required"})
+// POST /api/v1/images/:image/artifacts
+func (api *apiServer) upsertImageArtifact(c *gin.Context) {
+	image := strings.TrimSpace(c.Param("image"))
+	if image == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image name required"})
 		return
 	}
 	var req upsertArtifactRequest
@@ -2287,8 +2269,8 @@ func (api *apiServer) upsertPluginArtifact(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	art := db.PluginArtifact{
-		PluginName:   plugin,
+	art := db.ImageArtifact{
+		ImageName:   image,
 		Version:      strings.TrimSpace(req.Version),
 		ArtifactName: strings.TrimSpace(req.ArtifactName),
 		Kind:         strings.TrimSpace(req.Kind),
@@ -2308,20 +2290,20 @@ func (api *apiServer) upsertPluginArtifact(c *gin.Context) {
 		return
 	}
 	if err := store.WithTx(c.Request.Context(), func(q db.Queries) error {
-		return q.PluginArtifacts().Upsert(c.Request.Context(), art)
+		return q.ImageArtifacts().Upsert(c.Request.Context(), art)
 	}); err != nil {
-		api.logger.Error("upsert plugin artifact", "plugin", plugin, "artifact", art.ArtifactName, "version", art.Version, "error", err)
+		api.logger.Error("upsert image artifact", "image", image, "artifact", art.ArtifactName, "version", art.Version, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upsert artifact"})
 		return
 	}
 	c.Status(http.StatusCreated)
 }
 
-// DELETE /api/v1/plugins/:plugin/artifacts?version=...
-func (api *apiServer) deletePluginArtifacts(c *gin.Context) {
-	plugin := strings.TrimSpace(c.Param("plugin"))
-	if plugin == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "plugin name required"})
+// DELETE /api/v1/images/:image/artifacts?version=...
+func (api *apiServer) deleteImageArtifacts(c *gin.Context) {
+	image := strings.TrimSpace(c.Param("image"))
+	if image == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image name required"})
 		return
 	}
 	version := strings.TrimSpace(c.Query("version"))
@@ -2333,15 +2315,15 @@ func (api *apiServer) deletePluginArtifacts(c *gin.Context) {
 	var err error
 	if version != "" {
 		err = store.WithTx(c.Request.Context(), func(q db.Queries) error {
-			return q.PluginArtifacts().DeleteByPluginVersion(c.Request.Context(), plugin, version)
+			return q.ImageArtifacts().DeleteByImageVersion(c.Request.Context(), image, version)
 		})
 	} else {
 		err = store.WithTx(c.Request.Context(), func(q db.Queries) error {
-			return q.PluginArtifacts().DeleteByPlugin(c.Request.Context(), plugin)
+			return q.ImageArtifacts().DeleteByImage(c.Request.Context(), image)
 		})
 	}
 	if err != nil {
-		api.logger.Error("delete plugin artifacts", "plugin", plugin, "version", version, "error", err)
+		api.logger.Error("delete image artifacts", "image", image, "version", version, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete artifacts"})
 		return
 	}

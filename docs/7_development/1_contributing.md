@@ -1,4 +1,9 @@
-# Contributing
+---
+title: "Contributing"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Thanks for your interest in Volant! This document keeps it simple and actionable.
 

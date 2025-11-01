@@ -1,4 +1,9 @@
-# kestrel (agent) reference
+---
+title: "kestrel (agent) reference"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Kestrel is the in-guest agent and default PID1 for initramfs default mode.
 

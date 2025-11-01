@@ -14,7 +14,6 @@ INSTALL_FORCE=no
 RUN_SETUP=yes
 NONINTERACTIVE=no
 REPO="volantvm/volant"
-VMLINUX_URL="https://github.com/cloud-hypervisor/linux/releases/download/ch-release-v6.12.8-20250613/vmlinux-x86_64"
 
 # Install paths
 WORK_DIR="/var/lib/volant"
@@ -48,8 +47,8 @@ usage() {
   cat <<EOF
 volant Installer
 
-Downloads and installs volant binaries from its GitHub release and the vmlinux
-kernel directly from the official Cloud Hypervisor release page.
+Downloads and installs volant binaries and kernels (bzImage and vmlinux) from
+the official Volant GitHub releases.
 
 Usage: install.sh [options]
 
@@ -227,7 +226,7 @@ resolve_version() {
 
 download_and_install_artifacts() {
   local base_url="https://github.com/${REPO}/releases/latest/download/"
-  local artifacts=("volar" "kestrel" "volantd" "driftd" "drift_l4.bpf.o" "bzImage" "checksums.txt")
+  local artifacts=("volar" "kestrel" "volantd" "driftd" "drift_l4.bpf.o" "bzImage" "vmlinux" "checksums.txt")
 
   log_info "Downloading volant artifacts..."
   for artifact in "${artifacts[@]}"; do
@@ -247,12 +246,6 @@ download_and_install_artifacts() {
   fi
   popd >/dev/null
   log_info "Volant checksums verified successfully."
-
-  log_info "Downloading vmlinux kernel from Cloud Hypervisor..."
-  if ! curl -fL "${VMLINUX_URL}" -o "${TMP_DIR}/vmlinux"; then
-      log_error "Failed to download vmlinux from ${VMLINUX_URL}."
-      exit 1
-  fi
 
   log_info "Installing binaries to /usr/local/bin..."
   sudo install -m 0755 "${TMP_DIR}/volar" /usr/local/bin/volar

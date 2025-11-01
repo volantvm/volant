@@ -1,4 +1,9 @@
-# Troubleshooting
+---
+title: "Troubleshooting"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 ## Build on macOS fails with netlink TUNTAP constants
 
@@ -27,7 +32,7 @@ Use:
 make openapi-export
 ```
 
-It builds bin/openapi-export and writes docs/api-reference/openapi.json with the server URL set to https://docs.volantvm.com.
+It builds bin/openapi-export and writes docs/6_reference/api/openapi.json with the server URL set to https://docs.volantvm.com.
 
 ## Networking not working on Linux
 

@@ -1,4 +1,9 @@
-# volar CLI reference
+---
+title: "volar CLI reference"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Source: internal/cli/standard.
 

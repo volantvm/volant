@@ -1,4 +1,9 @@
-# Why Volant
+---
+title: "Why Volant"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Volant treats microVMs as first‑class runtimes: real kernels, deterministic networking, and a tiny control plane. You get the security of VMs with the ergonomics of containers.
 

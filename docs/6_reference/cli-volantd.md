@@ -1,4 +1,9 @@
-# volantd (server) flags
+---
+title: "volantd (server) flags"
+author: "VolantVM"
+date: "2025-11-01"
+---
+
 
 Source: cmd/volantd/main.go, internal/server/config.
 
@@ -11,8 +16,8 @@ volantd reads most settings from environment variables via internal/server/confi
 - VOLANT_RUNTIME_DIR: runtime directory (~/.volant/run by default)
 - VOLANT_LOG_DIR: logs directory (~/.volant/logs by default)
 - VOLANT_BRIDGE: Linux bridge name (default vbr0)
-- VOLANT_KERNEL_BZIMAGE: bzImage path for rootfs strategy
-- VOLANT_KERNEL_VMLINUX: vmlinux path for initramfs strategy
+- VOLANT_KERNEL_BZIMAGE: bzImage path (compressed kernel, used by default)
+- VOLANT_KERNEL_VMLINUX: vmlinux path (uncompressed ELF, same kernel as bzImage)
 - VOLANT_DB_PATH: sqlite database path
 - VOLANT_HYPERVISOR: cloud-hypervisor binary path (default: cloud-hypervisor)
 

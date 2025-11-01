@@ -42,8 +42,8 @@ func (q *queries) IPAllocations() db.IPRepository {
 	return &ipRepository{exec: q.exec}
 }
 
-func (q *queries) Plugins() db.PluginRepository {
-	return &pluginRepository{exec: q.exec}
+func (q *queries) Images() db.ImageRepository {
+	return &imageRepository{exec: q.exec}
 }
 
 func (q *queries) VMConfigs() db.VMConfigRepository {
@@ -54,8 +54,8 @@ func (q *queries) VMGroups() db.VMGroupRepository {
 	return &vmGroupRepository{exec: q.exec}
 }
 
-func (q *queries) PluginArtifacts() db.PluginArtifactRepository {
-	return &pluginArtifactRepository{exec: q.exec}
+func (q *queries) ImageArtifacts() db.ImageArtifactRepository {
+	return &imageArtifactRepository{exec: q.exec}
 }
 
 func (q *queries) VMCloudInit() db.VMCloudInitRepository {
@@ -276,11 +276,11 @@ func (r *ipRepository) Lookup(ctx context.Context, ip string) (*db.IPAllocation,
 	return &alloc, nil
 }
 
-type pluginRepository struct {
+type imageRepository struct {
 	exec executor
 }
 
-var _ db.PluginRepository = (*pluginRepository)(nil)
+var _ db.ImageRepository = (*imageRepository)(nil)
 
 type vmGroupRepository struct {
 	exec executor
@@ -288,11 +288,11 @@ type vmGroupRepository struct {
 
 var _ db.VMGroupRepository = (*vmGroupRepository)(nil)
 
-type pluginArtifactRepository struct {
+type imageArtifactRepository struct {
 	exec executor
 }
 
-var _ db.PluginArtifactRepository = (*pluginArtifactRepository)(nil)
+var _ db.ImageArtifactRepository = (*imageArtifactRepository)(nil)
 
 type vmCloudInitRepository struct {
 	exec executor
@@ -306,77 +306,77 @@ type vmConfigRepository struct {
 
 var _ db.VMConfigRepository = (*vmConfigRepository)(nil)
 
-func (r *pluginRepository) Upsert(ctx context.Context, plugin db.Plugin) error {
-	meta := plugin.Metadata
+func (r *imageRepository) Upsert(ctx context.Context, image db.Image) error {
+	meta := image.Metadata
 	if meta == nil {
 		meta = []byte{}
 	}
-	_, err := r.exec.ExecContext(ctx, `INSERT INTO plugins (name, version, enabled, metadata, installed_at, updated_at)
+	_, err := r.exec.ExecContext(ctx, `INSERT INTO images (name, version, enabled, metadata, installed_at, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		ON CONFLICT(name) DO UPDATE SET version = excluded.version, enabled = excluded.enabled, metadata = excluded.metadata, updated_at = CURRENT_TIMESTAMP;`,
-		plugin.Name, plugin.Version, boolToInt(plugin.Enabled), meta,
+		image.Name, image.Version, boolToInt(image.Enabled), meta,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert plugin: %w", err)
+		return fmt.Errorf("upsert image: %w", err)
 	}
 	return nil
 }
 
-func (r *pluginRepository) List(ctx context.Context) ([]db.Plugin, error) {
-	rows, err := r.exec.QueryContext(ctx, `SELECT id, name, version, enabled, metadata, installed_at, updated_at FROM plugins ORDER BY name ASC;`)
+func (r *imageRepository) List(ctx context.Context) ([]db.Image, error) {
+	rows, err := r.exec.QueryContext(ctx, `SELECT id, name, version, enabled, metadata, installed_at, updated_at FROM images ORDER BY name ASC;`)
 	if err != nil {
-		return nil, fmt.Errorf("list plugins: %w", err)
+		return nil, fmt.Errorf("list images: %w", err)
 	}
 	defer rows.Close()
 
-	var result []db.Plugin
+	var result []db.Image
 	for rows.Next() {
-		plugin, err := scanPlugin(rows)
+		image, err := scanImage(rows)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, plugin)
+		result = append(result, image)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plugins: %w", err)
+		return nil, fmt.Errorf("iterate images: %w", err)
 	}
 	return result, nil
 }
 
-func (r *pluginRepository) GetByName(ctx context.Context, name string) (*db.Plugin, error) {
-	row := r.exec.QueryRowContext(ctx, `SELECT id, name, version, enabled, metadata, installed_at, updated_at FROM plugins WHERE name = ?;`, name)
-	plugin, err := scanPlugin(row)
+func (r *imageRepository) GetByName(ctx context.Context, name string) (*db.Image, error) {
+	row := r.exec.QueryRowContext(ctx, `SELECT id, name, version, enabled, metadata, installed_at, updated_at FROM images WHERE name = ?;`, name)
+	image, err := scanImage(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &plugin, nil
+	return &image, nil
 }
 
-func (r *pluginRepository) SetEnabled(ctx context.Context, name string, enabled bool) error {
-	res, err := r.exec.ExecContext(ctx, `UPDATE plugins SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?;`, boolToInt(enabled), name)
+func (r *imageRepository) SetEnabled(ctx context.Context, name string, enabled bool) error {
+	res, err := r.exec.ExecContext(ctx, `UPDATE images SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?;`, boolToInt(enabled), name)
 	if err != nil {
-		return fmt.Errorf("set plugin enabled: %w", err)
+		return fmt.Errorf("set image enabled: %w", err)
 	}
 	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
 		return sql.ErrNoRows
 	} else if err != nil {
-		return fmt.Errorf("set plugin enabled rows: %w", err)
+		return fmt.Errorf("set image enabled rows: %w", err)
 	}
 	return nil
 }
 
-func (r *pluginRepository) Delete(ctx context.Context, name string) error {
-	res, err := r.exec.ExecContext(ctx, `DELETE FROM plugins WHERE name = ?;`, name)
+func (r *imageRepository) Delete(ctx context.Context, name string) error {
+	res, err := r.exec.ExecContext(ctx, `DELETE FROM images WHERE name = ?;`, name)
 	if err != nil {
-		return fmt.Errorf("delete plugin: %w", err)
+		return fmt.Errorf("delete image: %w", err)
 	}
 	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
 		return sql.ErrNoRows
 	} else if err != nil {
-		return fmt.Errorf("delete plugin rows: %w", err)
+		return fmt.Errorf("delete image rows: %w", err)
 	}
 	return nil
 }
@@ -459,61 +459,61 @@ func (r *vmGroupRepository) List(ctx context.Context) ([]db.VMGroup, error) {
 	return result, nil
 }
 
-func (r *pluginArtifactRepository) Upsert(ctx context.Context, artifact db.PluginArtifact) error {
-	if _, err := r.exec.ExecContext(ctx, `INSERT INTO plugin_artifacts (plugin_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes)
+func (r *imageArtifactRepository) Upsert(ctx context.Context, artifact db.ImageArtifact) error {
+	if _, err := r.exec.ExecContext(ctx, `INSERT INTO image_artifacts (image_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(plugin_name, version, artifact_name) DO UPDATE SET kind = excluded.kind, source_url = excluded.source_url, checksum = excluded.checksum, format = excluded.format, local_path = excluded.local_path, size_bytes = excluded.size_bytes, updated_at = CURRENT_TIMESTAMP;`,
-		artifact.PluginName, artifact.Version, artifact.ArtifactName, artifact.Kind, artifact.SourceURL, artifact.Checksum, artifact.Format, artifact.LocalPath, artifact.SizeBytes); err != nil {
+		ON CONFLICT(image_name, version, artifact_name) DO UPDATE SET kind = excluded.kind, source_url = excluded.source_url, checksum = excluded.checksum, format = excluded.format, local_path = excluded.local_path, size_bytes = excluded.size_bytes, updated_at = CURRENT_TIMESTAMP;`,
+		artifact.ImageName, artifact.Version, artifact.ArtifactName, artifact.Kind, artifact.SourceURL, artifact.Checksum, artifact.Format, artifact.LocalPath, artifact.SizeBytes); err != nil {
 		return fmt.Errorf("upsert plugin artifact: %w", err)
 	}
 	return nil
 }
 
-func (r *pluginArtifactRepository) ListByPlugin(ctx context.Context, plugin string) ([]db.PluginArtifact, error) {
-	rows, err := r.exec.QueryContext(ctx, `SELECT id, plugin_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM plugin_artifacts WHERE plugin_name = ? ORDER BY version DESC, artifact_name ASC;`, plugin)
+func (r *imageArtifactRepository) ListByImage(ctx context.Context, image string) ([]db.ImageArtifact, error) {
+	rows, err := r.exec.QueryContext(ctx, `SELECT id, image_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM image_artifacts WHERE image_name = ? ORDER BY version DESC, artifact_name ASC;`, image)
 	if err != nil {
-		return nil, fmt.Errorf("list plugin artifacts: %w", err)
+		return nil, fmt.Errorf("list image artifacts: %w", err)
 	}
 	defer rows.Close()
 
-	var result []db.PluginArtifact
+	var result []db.ImageArtifact
 	for rows.Next() {
-		artifact, err := scanPluginArtifact(rows)
+		artifact, err := scanImageArtifact(rows)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, artifact)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plugin artifacts: %w", err)
+		return nil, fmt.Errorf("iterate image artifacts: %w", err)
 	}
 	return result, nil
 }
 
-func (r *pluginArtifactRepository) ListByPluginVersion(ctx context.Context, plugin, version string) ([]db.PluginArtifact, error) {
-	rows, err := r.exec.QueryContext(ctx, `SELECT id, plugin_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM plugin_artifacts WHERE plugin_name = ? AND version = ? ORDER BY artifact_name ASC;`, plugin, version)
+func (r *imageArtifactRepository) ListByImageVersion(ctx context.Context, image, version string) ([]db.ImageArtifact, error) {
+	rows, err := r.exec.QueryContext(ctx, `SELECT id, image_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM image_artifacts WHERE image_name = ? AND version = ? ORDER BY artifact_name ASC;`, image, version)
 	if err != nil {
-		return nil, fmt.Errorf("list plugin artifacts by version: %w", err)
+		return nil, fmt.Errorf("list image artifacts by version: %w", err)
 	}
 	defer rows.Close()
 
-	var result []db.PluginArtifact
+	var result []db.ImageArtifact
 	for rows.Next() {
-		artifact, err := scanPluginArtifact(rows)
+		artifact, err := scanImageArtifact(rows)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, artifact)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plugin artifacts by version: %w", err)
+		return nil, fmt.Errorf("iterate image artifacts by version: %w", err)
 	}
 	return result, nil
 }
 
-func (r *pluginArtifactRepository) Get(ctx context.Context, plugin, version, artifactName string) (*db.PluginArtifact, error) {
-	row := r.exec.QueryRowContext(ctx, `SELECT id, plugin_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM plugin_artifacts WHERE plugin_name = ? AND version = ? AND artifact_name = ?;`, plugin, version, artifactName)
-	artifact, err := scanPluginArtifact(row)
+func (r *imageArtifactRepository) Get(ctx context.Context, image, version, artifactName string) (*db.ImageArtifact, error) {
+	row := r.exec.QueryRowContext(ctx, `SELECT id, image_name, version, artifact_name, kind, source_url, checksum, format, local_path, size_bytes, created_at, updated_at FROM image_artifacts WHERE image_name = ? AND version = ? AND artifact_name = ?;`, image, version, artifactName)
+	artifact, err := scanImageArtifact(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -523,16 +523,16 @@ func (r *pluginArtifactRepository) Get(ctx context.Context, plugin, version, art
 	return &artifact, nil
 }
 
-func (r *pluginArtifactRepository) DeleteByPluginVersion(ctx context.Context, plugin, version string) error {
-	if _, err := r.exec.ExecContext(ctx, `DELETE FROM plugin_artifacts WHERE plugin_name = ? AND version = ?;`, plugin, version); err != nil {
-		return fmt.Errorf("delete plugin artifacts by version: %w", err)
+func (r *imageArtifactRepository) DeleteByImageVersion(ctx context.Context, image, version string) error {
+	if _, err := r.exec.ExecContext(ctx, `DELETE FROM image_artifacts WHERE image_name = ? AND version = ?;`, image, version); err != nil {
+		return fmt.Errorf("delete image artifacts by version: %w", err)
 	}
 	return nil
 }
 
-func (r *pluginArtifactRepository) DeleteByPlugin(ctx context.Context, plugin string) error {
-	if _, err := r.exec.ExecContext(ctx, `DELETE FROM plugin_artifacts WHERE plugin_name = ?;`, plugin); err != nil {
-		return fmt.Errorf("delete plugin artifacts: %w", err)
+func (r *imageArtifactRepository) DeleteByImage(ctx context.Context, image string) error {
+	if _, err := r.exec.ExecContext(ctx, `DELETE FROM image_artifacts WHERE image_name = ?;`, image); err != nil {
+		return fmt.Errorf("delete image artifacts: %w", err)
 	}
 	return nil
 }
@@ -738,9 +738,9 @@ func scanIP(row rowScanner) (db.IPAllocation, error) {
 	return ip, nil
 }
 
-func scanPlugin(row rowScanner) (db.Plugin, error) {
+func scanImage(row rowScanner) (db.Image, error) {
 	var (
-		plugin      db.Plugin
+		image       db.Image
 		enabledInt  int64
 		metadataRaw []byte
 		installed   any
@@ -748,47 +748,47 @@ func scanPlugin(row rowScanner) (db.Plugin, error) {
 	)
 
 	if err := row.Scan(
-		&plugin.ID,
-		&plugin.Name,
-		&plugin.Version,
+		&image.ID,
+		&image.Name,
+		&image.Version,
 		&enabledInt,
 		&metadataRaw,
 		&installed,
 		&updated,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return db.Plugin{}, sql.ErrNoRows
+			return db.Image{}, sql.ErrNoRows
 		}
-		return db.Plugin{}, fmt.Errorf("scan plugin: %w", err)
+		return db.Image{}, fmt.Errorf("scan image: %w", err)
 	}
 
-	plugin.Enabled = enabledInt != 0
-	plugin.Metadata = append([]byte(nil), metadataRaw...)
-	plugin.InstalledAt, _ = parseTimeField(installed)
-	plugin.UpdatedAt, _ = parseTimeField(updated)
-	return plugin, nil
+	image.Enabled = enabledInt != 0
+	image.Metadata = append([]byte(nil), metadataRaw...)
+	image.InstalledAt, _ = parseTimeField(installed)
+	image.UpdatedAt, _ = parseTimeField(updated)
+	return image, nil
 }
 
-func scanPluginArtifact(row rowScanner) (db.PluginArtifact, error) {
+func scanImageArtifact(row rowScanner) (db.ImageArtifact, error) {
 	var (
-		artifact db.PluginArtifact
+		artifact db.ImageArtifact
 		created  any
 		updated  any
 	)
 
-	if err := row.Scan(&artifact.ID, &artifact.PluginName, &artifact.Version, &artifact.ArtifactName, &artifact.Kind, &artifact.SourceURL, &artifact.Checksum, &artifact.Format, &artifact.LocalPath, &artifact.SizeBytes, &created, &updated); err != nil {
+	if err := row.Scan(&artifact.ID, &artifact.ImageName, &artifact.Version, &artifact.ArtifactName, &artifact.Kind, &artifact.SourceURL, &artifact.Checksum, &artifact.Format, &artifact.LocalPath, &artifact.SizeBytes, &created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return db.PluginArtifact{}, err
+			return db.ImageArtifact{}, err
 		}
-		return db.PluginArtifact{}, fmt.Errorf("scan plugin artifact: %w", err)
+		return db.ImageArtifact{}, fmt.Errorf("scan image artifact: %w", err)
 	}
 	createdAt, err := parseTimestamp(created)
 	if err != nil {
-		return db.PluginArtifact{}, fmt.Errorf("parse artifact created_at: %w", err)
+		return db.ImageArtifact{}, fmt.Errorf("parse artifact created_at: %w", err)
 	}
 	updatedAt, err := parseTimestamp(updated)
 	if err != nil {
-		return db.PluginArtifact{}, fmt.Errorf("parse artifact updated_at: %w", err)
+		return db.ImageArtifact{}, fmt.Errorf("parse artifact updated_at: %w", err)
 	}
 	artifact.CreatedAt = createdAt
 	artifact.UpdatedAt = updatedAt

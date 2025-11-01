@@ -1,10 +1,15 @@
-# Extensibility and Conventions
+---
+title: "Extensibility and Conventions"
+author: "VolantVM"
+date: "2025-11-01"
+---
 
-## Plugins
 
-- Manifest schema: docs/schemas/plugin-manifest-v1.json
-- Authoring guides: docs/4_plugin-development/*
-- Install flow: POST /api/v1/plugins with manifest; stored in DB; exposed via registry
+## Images
+
+- Manifest schema: docs/6_reference/schemas/plugin-manifest-v1.json
+- Authoring guides: docs/4_image-development/*
+- Install flow: POST /api/v1/images with manifest; stored in DB; exposed via registry
 
 ## Config Overrides
 

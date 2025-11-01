@@ -69,15 +69,14 @@ type VM struct {
 
 // CreateVMRequest contains creation parameters.
 type CreateVMRequest struct {
-	Name          string           `json:"name"`
-	Plugin        string           `json:"plugin"`
-	Runtime       string           `json:"runtime,omitempty"`
-	CPUCores      int              `json:"cpu_cores"`
-	MemoryMB      int              `json:"memory_mb"`
-	KernelCmdline string           `json:"kernel_cmdline,omitempty"`
-	APIHost       string           `json:"api_host,omitempty"`
-	APIPort       string           `json:"api_port,omitempty"`
-	Config        *vmconfig.Config `json:"config,omitempty"`
+	Name          string                `json:"name"`
+	Plugin        string                `json:"plugin"`
+	Runtime       string                `json:"runtime,omitempty"`
+	KernelCmdline string                `json:"kernel_cmdline,omitempty"`
+	APIHost       string                `json:"api_host,omitempty"`
+	APIPort       string                `json:"api_port,omitempty"`
+	Config        *vmconfig.Config      `json:"config,omitempty"`
+	Overrides     vmconfig.Overrides    `json:"overrides,omitempty"`
 }
 
 // Deployment represents a VM deployment group.
@@ -141,7 +140,7 @@ type MCPResponse struct {
 	Error  string      `json:"error"`
 }
 
-type Plugin = pluginspec.Manifest
+type Image = pluginspec.Manifest
 
 func (c *Client) ListVMs(ctx context.Context) ([]VM, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/vms", nil)
@@ -734,32 +733,32 @@ func (c *Client) GetSystemStatus(ctx context.Context) (*SystemStatus, error) {
 	return &status, nil
 }
 
-func (c *Client) ListPlugins(ctx context.Context) ([]pluginspec.Manifest, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/plugins", nil)
+func (c *Client) ListImages(ctx context.Context) ([]pluginspec.Manifest, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/images", nil)
 	if err != nil {
 		return nil, err
 	}
 	var response struct {
-		Plugins []string `json:"plugins"`
+		Images []string `json:"images"`
 	}
 	if err := c.do(req, &response); err != nil {
 		return nil, err
 	}
-	result := make([]pluginspec.Manifest, 0, len(response.Plugins))
-	for _, name := range response.Plugins {
-		plugin, err := c.GetPlugin(ctx, name)
+	result := make([]pluginspec.Manifest, 0, len(response.Images))
+	for _, name := range response.Images {
+		image, err := c.GetImage(ctx, name)
 		if err != nil {
 			return nil, err
 		}
-		if plugin != nil {
-			result = append(result, *plugin)
+		if image != nil {
+			result = append(result, *image)
 		}
 	}
 	return result, nil
 }
 
-func (c *Client) GetPlugin(ctx context.Context, name string) (*pluginspec.Manifest, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/plugins/"+url.PathEscape(name), nil)
+func (c *Client) GetImage(ctx context.Context, name string) (*pluginspec.Manifest, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/images/"+url.PathEscape(name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -770,29 +769,29 @@ func (c *Client) GetPlugin(ctx context.Context, name string) (*pluginspec.Manife
 	return &manifest, nil
 }
 
-func (c *Client) DescribePlugin(ctx context.Context, name string) (*pluginspec.Manifest, error) {
-	return c.GetPlugin(ctx, name)
+func (c *Client) DescribeImage(ctx context.Context, name string) (*pluginspec.Manifest, error) {
+	return c.GetImage(ctx, name)
 }
 
-func (c *Client) InstallPlugin(ctx context.Context, manifest pluginspec.Manifest) error {
-	req, err := c.newRequest(ctx, http.MethodPost, "/api/v1/plugins", manifest)
+func (c *Client) InstallImage(ctx context.Context, manifest pluginspec.Manifest) error {
+	req, err := c.newRequest(ctx, http.MethodPost, "/api/v1/images", manifest)
 	if err != nil {
 		return err
 	}
 	return c.do(req, nil)
 }
 
-func (c *Client) RemovePlugin(ctx context.Context, name string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, "/api/v1/plugins/"+url.PathEscape(name), nil)
+func (c *Client) RemoveImage(ctx context.Context, name string) error {
+	req, err := c.newRequest(ctx, http.MethodDelete, "/api/v1/images/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
 	return c.do(req, nil)
 }
 
-func (c *Client) SetPluginEnabled(ctx context.Context, name string, enabled bool) error {
+func (c *Client) SetImageEnabled(ctx context.Context, name string, enabled bool) error {
 	payload := map[string]any{"enabled": enabled}
-	req, err := c.newRequest(ctx, http.MethodPost, "/api/v1/plugins/"+url.PathEscape(name)+"/enabled", payload)
+	req, err := c.newRequest(ctx, http.MethodPost, "/api/v1/images/"+url.PathEscape(name)+"/enabled", payload)
 	if err != nil {
 		return err
 	}
