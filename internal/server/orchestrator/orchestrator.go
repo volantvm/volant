@@ -322,6 +322,77 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	netmask := formatNetmask(e.subnet.Mask)
 	hostname := sanitizeHostname(req.Name)
 
+	// Resolve API endpoints first
+	apiHost := strings.TrimSpace(req.APIHost)
+	apiPort := strings.TrimSpace(req.APIPort)
+	if apiPort == "0" {
+		apiPort = ""
+	}
+	if apiHost == "" || apiPort == "" {
+		host, port := e.apiEndpoints()
+		if apiHost == "" {
+			apiHost = host
+		}
+		if apiPort == "" {
+			apiPort = port
+		}
+	}
+	if apiHost == "" {
+		apiHost = e.hostIP.String()
+	}
+	if strings.TrimSpace(apiPort) == "" {
+		apiPort = e.controlPort
+	}
+
+	var manifestForConfig *pluginspec.Manifest
+	if req.Manifest != nil {
+		manifestCopy := *req.Manifest
+		manifestCopy.Normalize()
+		manifestForConfig = &manifestCopy
+	}
+
+	// Build configuration FIRST to get resources before creating VM
+	configToStore := vmconfig.Config{}
+	if req.Config != nil {
+		// Use provided config directly (for backwards compatibility)
+		configToStore = req.Config.Clone()
+		configToStore.Plugin = pluginName
+		configToStore.Runtime = req.Runtime
+	} else if manifestForConfig != nil {
+		// Use new merge logic: apply overrides on top of manifest defaults
+		var err error
+		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, req.Overrides, pluginName, req.Runtime)
+		if err != nil {
+			return nil, fmt.Errorf("build vm config: %w", err)
+		}
+	} else {
+		// No manifest or config - ERROR: resources are required
+		return nil, fmt.Errorf("orchestrator: cannot create VM without manifest or config (resources required)")
+	}
+
+	// Apply kernel cmdline hint
+	extraCmdline := strings.TrimSpace(req.KernelCmdlineHint)
+	if extraCmdline == "" && req.Config != nil {
+		extraCmdline = strings.TrimSpace(req.Config.KernelCmdline)
+	}
+	if extraCmdline != "" {
+		configToStore.KernelCmdline = extraCmdline
+	}
+
+	// Ensure API endpoints are set
+	configToStore.API = vmconfig.API{
+		Host: apiHost,
+		Port: apiPort,
+	}
+
+	// Validate resources from merged config
+	if configToStore.Resources.CPUCores <= 0 {
+		return nil, fmt.Errorf("orchestrator: cpu cores must be > 0 (got %d after merging config)", configToStore.Resources.CPUCores)
+	}
+	if configToStore.Resources.MemoryMB <= 0 {
+		return nil, fmt.Errorf("orchestrator: memory must be > 0 (got %d after merging config)", configToStore.Resources.MemoryMB)
+	}
+
 	var (
 		insertedID int64
 		vmRecord   *db.VM
@@ -372,8 +443,8 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 			IPAddress:     ipAddress,
 			MACAddress:    mac,
 			VsockCID:      vsockCID,
-			CPUCores:      0, // Will be set from config after merge
-			MemoryMB:      0, // Will be set from config after merge
+			CPUCores:      configToStore.Resources.CPUCores,
+			MemoryMB:      configToStore.Resources.MemoryMB,
 			KernelCmdline: fullCmdline,
 			GroupID:       req.GroupID,
 		}
@@ -398,85 +469,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 
 	e.publishEvent(ctx, orchestratorevents.TypeVMCreated, orchestratorevents.VMStatusStarting, vmRecord, "vm record created")
 
-	apiHost := strings.TrimSpace(req.APIHost)
-	apiPort := strings.TrimSpace(req.APIPort)
-	if apiPort == "0" {
-		apiPort = ""
-	}
-	if apiHost == "" || apiPort == "" {
-		host, port := e.apiEndpoints()
-		if apiHost == "" {
-			apiHost = host
-		}
-		if apiPort == "" {
-			apiPort = port
-		}
-	}
-	if apiHost == "" {
-		apiHost = e.hostIP.String()
-	}
-	if strings.TrimSpace(apiPort) == "" {
-		apiPort = e.controlPort
-	}
-
-	var manifestForConfig *pluginspec.Manifest
-	if req.Manifest != nil {
-		manifestCopy := *req.Manifest
-		manifestCopy.Normalize()
-		manifestForConfig = &manifestCopy
-	}
-
 	additionalDisks := buildAdditionalDisks(req.Manifest)
-
-	// Build configuration using manifest defaults + runtime overrides
-	configToStore := vmconfig.Config{}
-	if req.Config != nil {
-		// Use provided config directly (for backwards compatibility)
-		configToStore = req.Config.Clone()
-		configToStore.Plugin = pluginName
-		configToStore.Runtime = req.Runtime
-	} else if manifestForConfig != nil {
-		// Use new merge logic: apply overrides on top of manifest defaults
-		var err error
-		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, req.Overrides, pluginName, req.Runtime)
-		if err != nil {
-			e.rollbackCreate(ctx, vmRecord)
-			return nil, fmt.Errorf("build vm config: %w", err)
-		}
-	} else {
-		// No manifest or config - ERROR: resources are required
-		e.rollbackCreate(ctx, vmRecord)
-		return nil, fmt.Errorf("orchestrator: cannot create VM without manifest or config (resources required)")
-	}
-
-	// Apply kernel cmdline hint
-	extraCmdline := strings.TrimSpace(req.KernelCmdlineHint)
-	if extraCmdline == "" && req.Config != nil {
-		extraCmdline = strings.TrimSpace(req.Config.KernelCmdline)
-	}
-	if extraCmdline != "" {
-		configToStore.KernelCmdline = extraCmdline
-	}
-
-	// Ensure API endpoints are set
-	configToStore.API = vmconfig.API{
-		Host: apiHost,
-		Port: apiPort,
-	}
-
-	// Update VM record with final resources from merged config
-	vmRecord.CPUCores = configToStore.Resources.CPUCores
-	vmRecord.MemoryMB = configToStore.Resources.MemoryMB
-
-	// Validate final resources
-	if vmRecord.CPUCores <= 0 {
-		e.rollbackCreate(ctx, vmRecord)
-		return nil, fmt.Errorf("orchestrator: cpu cores must be > 0 (got %d after merging config)", vmRecord.CPUCores)
-	}
-	if vmRecord.MemoryMB <= 0 {
-		e.rollbackCreate(ctx, vmRecord)
-		return nil, fmt.Errorf("orchestrator: memory must be > 0 (got %d after merging config)", vmRecord.MemoryMB)
-	}
 
 	var seedDisk *runtime.Disk
 	var cloudInitRecord *db.VMCloudInit
