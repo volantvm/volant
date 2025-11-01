@@ -270,12 +270,15 @@ int drift_l4_ingress(struct __sk_buff *skb)
 
 	__u8 proto = iph->protocol;
 	__u32 ihl_bytes = iph->ihl * 4;
-	void *l4 = (void *)iph + ihl_bytes;
+
+	// Calculate offsets as scalars first (verifier-safe pattern)
+	__u32 l3_off = sizeof(struct ethhdr);
+	__u32 l4_off = l3_off + ihl_bytes;
+
+	// Derive L4 pointer from base data + offset
+	void *l4 = data + l4_off;
 	if (l4 + sizeof(__be16) > data_end)
 		return TC_ACT_OK;
-
-	__u32 l3_off = (void *)iph - data;
-	__u32 l4_off = (void *)l4 - data;
 
 	if (proto == IPPROTO_TCP) {
 		struct tcphdr *tcph = l4;
@@ -495,12 +498,15 @@ int drift_l4_egress(struct __sk_buff *skb)
 
 	__u8 proto = iph->protocol;
 	__u32 ihl_bytes = iph->ihl * 4;
-	void *l4 = (void *)iph + ihl_bytes;
+
+	// Calculate offsets as scalars first (verifier-safe pattern)
+	__u32 l3_off = sizeof(struct ethhdr);
+	__u32 l4_off = l3_off + ihl_bytes;
+
+	// Derive L4 pointer from base data + offset
+	void *l4 = data + l4_off;
 	if (l4 + sizeof(__be16) > data_end)
 		return TC_ACT_OK;
-
-	__u32 l3_off = (void *)iph - data;
-	__u32 l4_off = (void *)l4 - data;
 
 	if (proto == IPPROTO_TCP) {
 		struct tcphdr *tcph = l4;
