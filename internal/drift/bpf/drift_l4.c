@@ -129,7 +129,10 @@ static __always_inline void update_stats(__u32 idx, __u64 bytes)
 // Select backend using round-robin algorithm
 static __always_inline __u32 select_backend_rr(struct backend_config_value *config)
 {
-	__u32 idx = __sync_fetch_and_add(&config->next_backend, 1) % config->backend_count;
+	// BPF doesn't allow direct use of XADD return value
+	// Must store to variable first, then use it
+	__u32 counter = __sync_fetch_and_add(&config->next_backend, 1);
+	__u32 idx = counter % config->backend_count;
 	return idx;
 }
 
