@@ -203,59 +203,6 @@ static __always_inline __u32 select_backend_ip_hash(__be32 src_ip, __u32 backend
 	return hash % backend_count;
 }
 
-// Look up backend for load balancing - returns selected backend values
-// Returns 0 on success, -1 if no healthy backend found
-// Output written to dst_ip and dst_port pointers
-static __always_inline int lookup_backend(__u8 proto, __be16 port, __be32 src_ip, __u32 lb_algorithm,
-                                           struct backend_config_value *config, __be32 *out_ip, __be16 *out_port)
-{
-	struct backend_key key = {
-		.proto = proto,
-		.port = port,
-		.backend_idx = 0,
-	};
-
-	__u32 selected_idx = 0;
-	if (lb_algorithm == LB_ALGORITHM_ROUND_ROBIN) {
-		selected_idx = select_backend_rr(config);
-	} else if (lb_algorithm == LB_ALGORITHM_LEAST_CONN) {
-		selected_idx = select_backend_least_conn(proto, port, config->backend_count);
-	} else if (lb_algorithm == LB_ALGORITHM_IP_HASH) {
-		selected_idx = select_backend_ip_hash(src_ip, config->backend_count);
-	}
-
-	// Clamp to valid range
-	if (selected_idx >= config->backend_count)
-		selected_idx = 0;
-
-	// Try selected backend
-	key.backend_idx = selected_idx;
-	struct backend_value *backend = bpf_map_lookup_elem(&backends, &key);
-	if (backend && backend->health_status == 1) {
-		*out_ip = backend->dst_ip;
-		*out_port = backend->dst_port;
-		// Increment connection count for least-conn
-		if (lb_algorithm == LB_ALGORITHM_LEAST_CONN)
-			__sync_fetch_and_add(&backend->conn_count, 1);
-		return 0;
-	}
-
-	// Simple fallback - try backend 0
-	if (selected_idx != 0) {
-		key.backend_idx = 0;
-		backend = bpf_map_lookup_elem(&backends, &key);
-		if (backend && backend->health_status == 1) {
-			*out_ip = backend->dst_ip;
-			*out_port = backend->dst_port;
-			if (lb_algorithm == LB_ALGORITHM_LEAST_CONN)
-				__sync_fetch_and_add(&backend->conn_count, 1);
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
 static __always_inline int rewrite_tcp(struct __sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, __be32 new_ip, __be16 new_port, __u32 l3_off, __u32 l4_off)
 {
 	__be16 old_port = tcph->dest;
@@ -357,9 +304,51 @@ int drift_l4_ingress(struct __sk_buff *skb)
 			if (!bc_value || bc_value->backend_count == 0)
 				return TC_ACT_OK; // No backends configured
 
-			// Select backend using configured algorithm
-			if (lookup_backend(proto, tcph->dest, iph->saddr, bc_value->lb_algorithm, bc_value, &dst_ip, &dst_port) != 0)
-				return TC_ACT_OK; // No healthy backend found
+			// Select backend using configured algorithm (inlined to avoid verifier pointer issues)
+			struct backend_key bk = {
+				.proto = proto,
+				.port = tcph->dest,
+				.backend_idx = 0,
+			};
+
+			__u32 selected_idx = 0;
+			if (bc_value->lb_algorithm == LB_ALGORITHM_ROUND_ROBIN) {
+				selected_idx = select_backend_rr(bc_value);
+			} else if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN) {
+				selected_idx = select_backend_least_conn(proto, tcph->dest, bc_value->backend_count);
+			} else if (bc_value->lb_algorithm == LB_ALGORITHM_IP_HASH) {
+				selected_idx = select_backend_ip_hash(iph->saddr, bc_value->backend_count);
+			}
+
+			// Clamp to valid range
+			if (selected_idx >= bc_value->backend_count)
+				selected_idx = 0;
+
+			// Try selected backend
+			bk.backend_idx = selected_idx;
+			struct backend_value *backend = bpf_map_lookup_elem(&backends, &bk);
+			if (backend && backend->health_status == 1) {
+				dst_ip = backend->dst_ip;
+				dst_port = backend->dst_port;
+				if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
+					__sync_fetch_and_add(&backend->conn_count, 1);
+			} else {
+				// Fallback - try backend 0
+				if (selected_idx != 0) {
+					bk.backend_idx = 0;
+					backend = bpf_map_lookup_elem(&backends, &bk);
+					if (backend && backend->health_status == 1) {
+						dst_ip = backend->dst_ip;
+						dst_port = backend->dst_port;
+						if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
+							__sync_fetch_and_add(&backend->conn_count, 1);
+					} else {
+						return TC_ACT_OK; // No healthy backend
+					}
+				} else {
+					return TC_ACT_OK; // No healthy backend
+				}
+			}
 		}
 
 		// Track connection for reverse NAT
@@ -411,9 +400,51 @@ int drift_l4_ingress(struct __sk_buff *skb)
 			if (!bc_value || bc_value->backend_count == 0)
 				return TC_ACT_OK; // No backends configured
 
-			// Select backend using configured algorithm
-			if (lookup_backend(proto, udph->dest, iph->saddr, bc_value->lb_algorithm, bc_value, &dst_ip, &dst_port) != 0)
-				return TC_ACT_OK; // No healthy backend found
+			// Select backend using configured algorithm (inlined to avoid verifier pointer issues)
+			struct backend_key bk = {
+				.proto = proto,
+				.port = udph->dest,
+				.backend_idx = 0,
+			};
+
+			__u32 selected_idx = 0;
+			if (bc_value->lb_algorithm == LB_ALGORITHM_ROUND_ROBIN) {
+				selected_idx = select_backend_rr(bc_value);
+			} else if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN) {
+				selected_idx = select_backend_least_conn(proto, udph->dest, bc_value->backend_count);
+			} else if (bc_value->lb_algorithm == LB_ALGORITHM_IP_HASH) {
+				selected_idx = select_backend_ip_hash(iph->saddr, bc_value->backend_count);
+			}
+
+			// Clamp to valid range
+			if (selected_idx >= bc_value->backend_count)
+				selected_idx = 0;
+
+			// Try selected backend
+			bk.backend_idx = selected_idx;
+			struct backend_value *backend = bpf_map_lookup_elem(&backends, &bk);
+			if (backend && backend->health_status == 1) {
+				dst_ip = backend->dst_ip;
+				dst_port = backend->dst_port;
+				if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
+					__sync_fetch_and_add(&backend->conn_count, 1);
+			} else {
+				// Fallback - try backend 0
+				if (selected_idx != 0) {
+					bk.backend_idx = 0;
+					backend = bpf_map_lookup_elem(&backends, &bk);
+					if (backend && backend->health_status == 1) {
+						dst_ip = backend->dst_ip;
+						dst_port = backend->dst_port;
+						if (bc_value->lb_algorithm == LB_ALGORITHM_LEAST_CONN)
+							__sync_fetch_and_add(&backend->conn_count, 1);
+					} else {
+						return TC_ACT_OK; // No healthy backend
+					}
+				} else {
+					return TC_ACT_OK; // No healthy backend
+				}
+			}
 		}
 
 		// Track connection for reverse NAT
