@@ -134,45 +134,55 @@ static __always_inline __u32 select_backend_rr(struct backend_config_value *conf
 }
 
 // Select backend using least-connections algorithm
-static __always_inline __u32 select_backend_least_conn(struct backend_key *base_key, __u32 backend_count)
+static __always_inline __u32 select_backend_least_conn(__u8 proto, __be16 port, __u32 backend_count)
 {
-	__u32 selected_idx = 0;
+	__u32 min_idx = 0;
 	__u64 min_conns = 0xFFFFFFFFFFFFFFFF;
 
-	// Unroll loop manually to avoid clang issues
-	struct backend_key key;
-	struct backend_value *backend;
+	struct backend_key key = {
+		.proto = proto,
+		.port = port,
+		.backend_idx = 0,
+	};
 
-	if (backend_count > 0) {
-		key = *base_key; key.backend_idx = 0;
-		backend = bpf_map_lookup_elem(&backends, &key);
-		if (backend && backend->health_status == 1 && backend->conn_count < min_conns) {
-			min_conns = backend->conn_count; selected_idx = 0;
-		}
+	// Check all backends and find the one with least connections
+	struct backend_value *b;
+
+	key.backend_idx = 0;
+	b = bpf_map_lookup_elem(&backends, &key);
+	if (b && b->health_status == 1 && b->conn_count < min_conns) {
+		min_conns = b->conn_count;
+		min_idx = 0;
 	}
+
 	if (backend_count > 1) {
-		key = *base_key; key.backend_idx = 1;
-		backend = bpf_map_lookup_elem(&backends, &key);
-		if (backend && backend->health_status == 1 && backend->conn_count < min_conns) {
-			min_conns = backend->conn_count; selected_idx = 1;
-		}
-	}
-	if (backend_count > 2) {
-		key = *base_key; key.backend_idx = 2;
-		backend = bpf_map_lookup_elem(&backends, &key);
-		if (backend && backend->health_status == 1 && backend->conn_count < min_conns) {
-			min_conns = backend->conn_count; selected_idx = 2;
-		}
-	}
-	if (backend_count > 3) {
-		key = *base_key; key.backend_idx = 3;
-		backend = bpf_map_lookup_elem(&backends, &key);
-		if (backend && backend->health_status == 1 && backend->conn_count < min_conns) {
-			min_conns = backend->conn_count; selected_idx = 3;
+		key.backend_idx = 1;
+		b = bpf_map_lookup_elem(&backends, &key);
+		if (b && b->health_status == 1 && b->conn_count < min_conns) {
+			min_conns = b->conn_count;
+			min_idx = 1;
 		}
 	}
 
-	return selected_idx;
+	if (backend_count > 2) {
+		key.backend_idx = 2;
+		b = bpf_map_lookup_elem(&backends, &key);
+		if (b && b->health_status == 1 && b->conn_count < min_conns) {
+			min_conns = b->conn_count;
+			min_idx = 2;
+		}
+	}
+
+	if (backend_count > 3) {
+		key.backend_idx = 3;
+		b = bpf_map_lookup_elem(&backends, &key);
+		if (b && b->health_status == 1 && b->conn_count < min_conns) {
+			min_conns = b->conn_count;
+			min_idx = 3;
+		}
+	}
+
+	return min_idx;
 }
 
 // Select backend using IP hash algorithm (consistent hashing)
@@ -192,53 +202,37 @@ static __always_inline __u32 select_backend_ip_hash(__be32 src_ip, __u32 backend
 // Look up backend for load balancing
 static __always_inline struct backend_value *lookup_backend(__u8 proto, __be16 port, __be32 src_ip, __u32 lb_algorithm, struct backend_config_value *config)
 {
-	struct backend_key base_key = {
+	struct backend_key key = {
 		.proto = proto,
 		.port = port,
 		.backend_idx = 0,
 	};
 
 	__u32 selected_idx = 0;
-	switch (lb_algorithm) {
-	case LB_ALGORITHM_ROUND_ROBIN:
+	if (lb_algorithm == LB_ALGORITHM_ROUND_ROBIN) {
 		selected_idx = select_backend_rr(config);
-		break;
-	case LB_ALGORITHM_LEAST_CONN:
-		selected_idx = select_backend_least_conn(&base_key, config->backend_count);
-		break;
-	case LB_ALGORITHM_IP_HASH:
+	} else if (lb_algorithm == LB_ALGORITHM_LEAST_CONN) {
+		selected_idx = select_backend_least_conn(proto, port, config->backend_count);
+	} else if (lb_algorithm == LB_ALGORITHM_IP_HASH) {
 		selected_idx = select_backend_ip_hash(src_ip, config->backend_count);
-		break;
-	default:
-		selected_idx = 0;
 	}
 
-	// Try selected backend first
-	base_key.backend_idx = selected_idx;
-	struct backend_value *backend = bpf_map_lookup_elem(&backends, &base_key);
+	// Clamp to valid range
+	if (selected_idx >= config->backend_count)
+		selected_idx = 0;
+
+	// Try selected backend
+	key.backend_idx = selected_idx;
+	struct backend_value *backend = bpf_map_lookup_elem(&backends, &key);
 	if (backend && backend->health_status == 1)
 		return backend;
 
-	// Fallback: find any healthy backend (manual unroll for up to 4 backends)
-	if (config->backend_count > 0 && selected_idx != 0) {
-		base_key.backend_idx = 0;
-		backend = bpf_map_lookup_elem(&backends, &base_key);
-		if (backend && backend->health_status == 1) return backend;
-	}
-	if (config->backend_count > 1 && selected_idx != 1) {
-		base_key.backend_idx = 1;
-		backend = bpf_map_lookup_elem(&backends, &base_key);
-		if (backend && backend->health_status == 1) return backend;
-	}
-	if (config->backend_count > 2 && selected_idx != 2) {
-		base_key.backend_idx = 2;
-		backend = bpf_map_lookup_elem(&backends, &base_key);
-		if (backend && backend->health_status == 1) return backend;
-	}
-	if (config->backend_count > 3 && selected_idx != 3) {
-		base_key.backend_idx = 3;
-		backend = bpf_map_lookup_elem(&backends, &base_key);
-		if (backend && backend->health_status == 1) return backend;
+	// Simple fallback - try backend 0
+	if (selected_idx != 0) {
+		key.backend_idx = 0;
+		backend = bpf_map_lookup_elem(&backends, &key);
+		if (backend && backend->health_status == 1)
+			return backend;
 	}
 
 	return NULL;
