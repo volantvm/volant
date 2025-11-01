@@ -342,13 +342,14 @@ int main(int argc, char *argv[]) {
 
     // Standard Linux init search order (try multiple possible init locations)
     // This makes C init work with ANY userspace init, not just kestrel
+    // NOTE: Prioritize /bin/kestrel for Volant OCI images before falling back to system inits
     printf("C INIT: Searching for init...\n");
-    
+
     const char *init_paths[] = {
-        "/sbin/init",       // Standard systemd/sysvinit location
-        "/init",            // Custom init in rootfs root
-        "/bin/init",        // Alternative location
-        "/bin/kestrel",     // Volant's Go init
+        "/bin/kestrel",     // Volant's Go init (highest priority for OCI rootfs)
+        "/init",            // Custom init in rootfs root (for custom init mode)
+        "/sbin/init",       // Standard systemd/sysvinit location (fallback)
+        "/bin/init",        // Alternative location (fallback)
         NULL
     };
     
