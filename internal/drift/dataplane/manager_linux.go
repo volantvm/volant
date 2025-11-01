@@ -185,8 +185,8 @@ func (m *manager) ConfigureLoadBalancer(_ context.Context, config LoadBalancerCo
 	if len(config.Backends) == 0 {
 		return fmt.Errorf("dataplane: at least one backend required")
 	}
-	if len(config.Backends) > 16 {
-		return fmt.Errorf("dataplane: maximum 16 backends supported")
+	if len(config.Backends) > 4 {
+		return fmt.Errorf("dataplane: maximum 4 backends supported")
 	}
 
 	// Remove from simple portmap if exists (migrate to LB)
