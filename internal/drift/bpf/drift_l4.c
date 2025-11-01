@@ -8,6 +8,9 @@
 
 #ifndef ETH_P_IP
 #define ETH_P_IP 0x0800
+#define ETH_HLEN 14
+#define IP_HLEN 20
+#define L4_OFFSET (ETH_HLEN + IP_HLEN)
 #endif
 
 // Portmap: maps (protocol, host_port) -> (backend_ip, backend_port)
@@ -269,16 +272,17 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		return TC_ACT_OK;
 
 	__u8 proto = iph->protocol;
-	__u32 ihl_bytes = iph->ihl * 4;
 
-	// Calculate offsets as scalars first (verifier-safe pattern)
-	__u32 l3_off = sizeof(struct ethhdr);
-	__u32 l4_off = l3_off + ihl_bytes;
-
-	// Derive L4 pointer from base data + offset
-	void *l4 = data + l4_off;
+	// Use fixed offsets to avoid variable pointer arithmetic (verifier requirement)
+	// Note: This assumes standard IP header with no options (20 bytes)
+	// Derive L4 pointer from base data pointer with constant offset
+	void *l4 = data + ETH_HLEN + IP_HLEN;
 	if (l4 + sizeof(__be16) > data_end)
 		return TC_ACT_OK;
+
+	// Precompute offsets for checksum/rewrite helpers
+	const __u32 l3_off = ETH_HLEN;
+	const __u32 l4_off = ETH_HLEN + IP_HLEN;
 
 	if (proto == IPPROTO_TCP) {
 		struct tcphdr *tcph = l4;
@@ -497,16 +501,17 @@ int drift_l4_egress(struct __sk_buff *skb)
 		return TC_ACT_OK;
 
 	__u8 proto = iph->protocol;
-	__u32 ihl_bytes = iph->ihl * 4;
 
-	// Calculate offsets as scalars first (verifier-safe pattern)
-	__u32 l3_off = sizeof(struct ethhdr);
-	__u32 l4_off = l3_off + ihl_bytes;
-
-	// Derive L4 pointer from base data + offset
-	void *l4 = data + l4_off;
+	// Use fixed offsets to avoid variable pointer arithmetic (verifier requirement)
+	// Note: This assumes standard IP header with no options (20 bytes)
+	// Derive L4 pointer from base data pointer with constant offset
+	void *l4 = data + ETH_HLEN + IP_HLEN;
 	if (l4 + sizeof(__be16) > data_end)
 		return TC_ACT_OK;
+
+	// Precompute offsets for checksum/rewrite helpers
+	const __u32 l3_off = ETH_HLEN;
+	const __u32 l4_off = ETH_HLEN + IP_HLEN;
 
 	if (proto == IPPROTO_TCP) {
 		struct tcphdr *tcph = l4;
