@@ -821,7 +821,10 @@ static void start_workload(manifest_t *manifest) {
     if (pid == 0) {
         // Child process: exec workload
 
-        // Set environment variables
+        // Set up PATH environment
+        setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+
+        // Set environment variables from manifest
         if (manifest->workload.env) {
             for (int i = 0; i < manifest->workload.env_count; i++) {
                 putenv(manifest->workload.env[i]);
@@ -831,7 +834,8 @@ static void start_workload(manifest_t *manifest) {
         // Change working directory
         if (manifest->workload.workdir) {
             if (chdir(manifest->workload.workdir) != 0) {
-                LOG("Warning: failed to chdir to %s", manifest->workload.workdir);
+                fprintf(stderr, "Warning: failed to chdir to %s: %s\n",
+                    manifest->workload.workdir, strerror(errno));
             }
         }
 
@@ -839,7 +843,8 @@ static void start_workload(manifest_t *manifest) {
         execvp(manifest->workload.entrypoint[0], manifest->workload.entrypoint);
 
         // If we get here, exec failed
-        fprintf(stderr, "Failed to exec workload: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to exec workload %s: %s\n",
+            manifest->workload.entrypoint[0], strerror(errno));
         exit(1);
     }
 
