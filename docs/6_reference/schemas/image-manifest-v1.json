@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/volantvm/volant/main/docs/schemas/plugin-manifest-v1.json",
-  "title": "Volant Plugin Manifest v1",
+  "$id": "https://raw.githubusercontent.com/volantvm/volant/main/docs/schemas/image-manifest-v1.json",
+  "title": "Volant Image Manifest v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "name", "version", "runtime", "resources", "workload"],
@@ -31,9 +31,9 @@
     "workload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "base_url", "entrypoint"],
+      "required": ["type", "entrypoint"],
       "properties": {
-        "type": { "type": "string", "enum": ["http"] },
+        "type": { "type": "string", "enum": ["exec", "http", "grpc"] },
         "base_url": { "type": "string" },
         "entrypoint": {
           "type": "array",
@@ -45,7 +45,17 @@
           "additionalProperties": { "type": "string" }
         },
         "workdir": { "type": "string" }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "http" } }
+          },
+          "then": {
+            "required": ["type", "base_url", "entrypoint"]
+          }
+        }
+      ]
     },
     "health_check": {
       "type": "object",

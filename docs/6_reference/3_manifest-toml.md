@@ -34,44 +34,75 @@ my-project/
 ### Top-Level Metadata
 
 ```toml
-schema_version = "1.0"    # Required: manifest schema version
+schema_version = "v1"    # Required: manifest schema version
 name = "myapp"            # Required: image name
 version = "1.0.0"         # Required: semantic version
 runtime = "myapp"         # Optional: defaults to name if omitted
 ```
 
-- **schema_version**: Must be "1.0"
+- **schema_version**: Must be "v1"
 - **name**: Unique identifier for this image
 - **version**: Semantic version string
 - **runtime**: Runtime identifier (defaults to name)
-
-### Resources
-
-```toml
-[resources]
-cpu_cores = 2       # Required: default CPU cores (must be > 0)
-memory_mb = 1024    # Required: default memory in MB (must be > 0)
-```
-
-These are the **default** resources for VMs created from this image. Can be overridden with `--cpu` and `--memory` flags.
 
 ### Workload
 
 ```toml
 [workload]
-entrypoint = "/usr/bin/myapp"    # Required: command to execute
-args = ["--port", "8080"]         # Optional: arguments to entrypoint
+type = "exec"                                      # Required: "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp", "--port", "8080"]  # Required: command and args as array
 ```
 
-- **entrypoint**: The main command/binary to run (required)
-- **args**: Array of arguments passed to entrypoint (optional)
+- **type**: Workload type (required)
+  - **"exec"**: For executables (most common) - no base_url required
+  - **"http"**: For HTTP services - requires base_url field
+  - **"grpc"**: For gRPC services (future support) - no base_url required
+- **entrypoint**: Command and arguments as array (required)
 
 ## Optional Sections
+
+### Resources
+
+```toml
+[resources]  # OPTIONAL section - Fledge injects defaults if omitted
+cpu_cores = 2       # Optional: default CPU cores (defaults to 2 if omitted)
+memory_mb = 1024    # Optional: default memory in MB (defaults to 2048 if omitted)
+```
+
+These are the **default** resources for VMs created from this image.
+
+**Important Design:**
+- The `[resources]` section in manifest.toml is **OPTIONAL**
+- If omitted from manifest.toml, Fledge automatically injects defaults (cpu_cores=2, memory_mb=2048) into the generated manifest.json
+- The generated manifest.json ALWAYS contains resources (either from manifest.toml or injected defaults)
+- These defaults can be overridden at VM creation time via CLI flags (`--cpu` and `--memory`)
+
+**Configuration Hierarchy:**
+```
+CLI flags (--cpu, --memory)
+    ↓ OVERRIDES
+Image manifest.json defaults (from manifest.toml or injected)
+    ↓ REQUIRED
+VM gets created with final resources
+```
+
+### Workload Environment and Working Directory
+
+```toml
+[workload]
+type = "exec"
+entrypoint = ["/usr/bin/myapp"]
+workdir = "/app"  # Optional: working directory
+
+[workload.env]  # Optional: workload-specific environment variables
+DATABASE_URL = "postgres://localhost/myapp"
+API_KEY = "secret"
+```
 
 ### Environment Variables
 
 ```toml
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 DATABASE_URL = "postgres://localhost/myapp"
@@ -79,6 +110,8 @@ CACHE_ENABLED = "true"
 ```
 
 All values must be strings. These are merged with VM-level `--env` flags (VM flags take precedence on conflicts).
+
+**Note:** You can also define workload-specific environment variables in `[workload.env]` if needed, but typically `[env]` is sufficient for runtime defaults.
 
 ### Network Configuration
 
@@ -188,7 +221,7 @@ Arbitrary key-value metadata for organizing and querying images.
 ```toml
 # manifest.toml - Complete example
 
-schema_version = "1.0"
+schema_version = "v1"
 name = "web-api"
 version = "1.2.3"
 runtime = "web-api"
@@ -198,10 +231,10 @@ cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/bin/api-server"
-args = ["--config", "/etc/api/config.toml"]
+type = "exec"
+entrypoint = ["/usr/bin/api-server", "--config", "/etc/api/config.toml"]
 
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 LOG_FORMAT = "json"
@@ -286,7 +319,7 @@ Example:
 cpu_cores = 2
 memory_mb = 1024
 
-[workload.env]
+[env]
 LOG_LEVEL = "info"
 PORT = "8080"
 ```
@@ -311,12 +344,13 @@ Result:
 Fledge validates manifest.toml during build:
 
 **Required checks:**
-- schema_version must be "1.0"
+- schema_version must be "v1"
 - name must not be empty
 - version must not be empty
 - resources.cpu_cores must be > 0
 - resources.memory_mb must be > 0
-- workload.entrypoint must not be empty
+- workload.type must not be empty (typically "exec")
+- workload.entrypoint must be non-empty array
 
 **Optional checks:**
 - network.mode must be "bridged", "vsock", or "dhcp"

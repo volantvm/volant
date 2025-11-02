@@ -307,30 +307,37 @@
         "type": "object"
       },
       "Overrides": {
+        "description": "Runtime overrides that take precedence over manifest.json defaults. All fields are optional. CLI flags: --cpu, --memory, --env, --port, --network-mode",
         "properties": {
           "cpu_cores": {
             "type": "integer",
-            "nullable": true
+            "nullable": true,
+            "description": "Override CPU cores from manifest.json default"
           },
           "memory_mb": {
             "type": "integer",
-            "nullable": true
+            "nullable": true,
+            "description": "Override memory MB from manifest.json default"
           },
           "env": {
             "additionalProperties": {
               "type": "string"
             },
-            "type": "object"
+            "type": "object",
+            "description": "Environment variables (merged with manifest defaults, overrides take precedence)"
           },
           "expose_ports": {
             "items": {
               "$ref": "#/components/schemas/Expose"
             },
-            "type": "array"
+            "type": "array",
+            "description": "Port exposures (replaces manifest defaults if provided)"
           },
           "network_mode": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "enum": ["vsock", "bridged", "dhcp"],
+            "description": "Override network mode from manifest.json default"
           }
         },
         "type": "object"
@@ -742,7 +749,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "description": "Image manifest (see plugin-manifest-v1.json schema)",
+                "description": "Image manifest (see image-manifest-v1.json schema)",
                 "type": "object"
               }
             }
@@ -827,7 +834,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Image manifest (see plugin-manifest-v1.json schema)",
+                  "description": "Image manifest (see image-manifest-v1.json schema)",
                   "type": "object"
                 }
               }

@@ -82,20 +82,21 @@ APP_VERSION = "1.0.0"
 ### manifest.toml (Runtime Defaults)
 
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "nginx"
 version = "0.1.0"
 runtime = "nginx"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/docker-entrypoint.sh"
-args = ["nginx", "-g", "daemon off;"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]
 
-[workload.env]
+[env]
 NGINX_PORT = "80"
 LOG_LEVEL = "info"
 

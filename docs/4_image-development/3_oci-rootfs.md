@@ -55,20 +55,21 @@ overlay_size = "1G"         # tmpfs size for runtime writes
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "nginx"
 version = "0.1.0"
 runtime = "nginx"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/docker-entrypoint.sh"
-args = ["nginx", "-g", "daemon off;"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]
 
-[workload.env]
+[env]
 NGINX_PORT = "80"
 
 [[network.expose]]
@@ -148,20 +149,21 @@ overlay_size = "1G"
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/local/bin/node"
-args = ["/app/server.js"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/local/bin/node", "/app/server.js"]
 
-[workload.env]
+[env]
 NODE_ENV = "production"
 PORT = "3000"
 LOG_LEVEL = "info"
@@ -256,7 +258,7 @@ The generated manifest.json includes the rootfs section:
 
 ```json
 {
-  "$schema": "./../schemas/plugin-manifest-v1.json",
+  "$schema": "./../schemas/image-manifest-v1.json",
   "schema_version": "1.0",
   "name": "nginx",
   "version": "0.1.0",
@@ -366,20 +368,21 @@ overlay_size = "1G"
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "node-api"
 version = "2.1.0"
 runtime = "node-api"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/local/bin/node"
-args = ["src/server.js"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/local/bin/node", "src/server.js"]
 
-[workload.env]
+[env]
 NODE_ENV = "production"
 PORT = "3000"
 LOG_LEVEL = "info"

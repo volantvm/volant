@@ -13,15 +13,18 @@ References:
 - internal/pluginspec/spec.go
 
 Summary of required fields:
-- schema_version: string
+- schema_version: string (must be "v1")
 - name: string
 - version: string
 - runtime: string (defaults to name when empty)
-- resources: { cpu_cores: int > 0, memory_mb: int > 0 }
-- workload: { type: "http", base_url: string URL, entrypoint: [string, ...] }
+- resources: { cpu_cores: int > 0, memory_mb: int > 0 } (always present in manifest.json)
+- workload: { type: "exec"|"http"|"grpc", entrypoint: [string, ...], base_url?: string }
+  - type "exec": for executables (most common) - no base_url required
+  - type "http": for HTTP services - requires base_url
+  - type "grpc": for gRPC services (future) - no base_url required
 - Exactly one of:
   - initramfs: { url: string, checksum?: string }
-  - rootfs: { url: string, checksum?: string, format?: "raw"|"qcow2" }
+  - rootfs: { url: string, checksum?: string, format?: "raw"|"qcow2"|"squashfs"|"ext4"|"xfs"|"btrfs" }
 
 Optional fields:
 - image, image_digest (for OCI lineage)
@@ -34,4 +37,4 @@ Optional fields:
 - openapi: URL or absolute file path
 - labels: map<string,string>
 
-See docs/6_reference/schemas/plugin-manifest-v1.json for JSON Schema.
+See docs/6_reference/schemas/image-manifest-v1.json for JSON Schema.

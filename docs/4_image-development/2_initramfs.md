@@ -60,20 +60,21 @@ version = "latest"
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 1
 memory_mb = 512
 
 [workload]
-entrypoint = "/usr/bin/myapp"
-args = []
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp"]
 
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 
@@ -106,18 +107,19 @@ path = "./my-init"
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 1
 memory_mb = 512
 
 [workload]
-entrypoint = "/init"
-args = []
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/init"]
 ```
 
 Fledge copies `./my-init` to `/init` (0755). No agent allowed in this mode.
@@ -143,18 +145,19 @@ none = true
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "my-supervisor"
 version = "1.0.0"
 runtime = "my-supervisor"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 1
 memory_mb = 512
 
 [workload]
-entrypoint = "/init"
-args = []
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/init"]
 ```
 
 Your binary must mount `/proc`, `/sys`, `/dev` and handle PID 1 responsibilities.
@@ -223,20 +226,21 @@ APP_VERSION = "1.0.0"
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/bin/myapp"
-args = ["--config", "/etc/myapp/config.toml"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp", "--config", "/etc/myapp/config.toml"]
 
-[workload.env]
+[env]
 APP_VERSION = "1.0.0"
 LOG_LEVEL = "info"
 ```
@@ -313,20 +317,21 @@ busybox_sha256 = "6e123e7f3202a8c1e9b1f94d8941580a25135382b99e8d3e34fb858bba3113
 
 **manifest.toml:**
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "web-server"
 version = "1.2.3"
 runtime = "web-server"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 512
 
 [workload]
-entrypoint = "/usr/bin/web-server"
-args = ["--config", "/etc/web-server/config.toml"]
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/web-server", "--config", "/etc/web-server/config.toml"]
 
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 LOG_FORMAT = "json"

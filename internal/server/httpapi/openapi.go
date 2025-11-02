@@ -550,7 +550,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 
 	// /api/v1/images
 	manifestSchema := openapi3.NewObjectSchema()
-	manifestSchema.Description = "Image manifest (see plugin-manifest-v1.json schema)"
+	manifestSchema.Description = "Image manifest (see image-manifest-v1.json schema)"
 	spec.AddOperation("/api/v1/images", http.MethodGet, func() *openapi3.Operation {
 		op := openapi3.NewOperation()
 		op.Summary = "List images"

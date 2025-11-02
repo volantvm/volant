@@ -7,7 +7,7 @@ date: "2025-11-01"
 
 ## Images
 
-- Manifest schema: docs/6_reference/schemas/plugin-manifest-v1.json
+- Manifest schema: docs/6_reference/schemas/image-manifest-v1.json
 - Authoring guides: docs/4_image-development/*
 - Install flow: POST /api/v1/images with manifest; stored in DB; exposed via registry
 

@@ -139,20 +139,21 @@ size_buffer_mb = 100
 ### 3. Create manifest.toml
 
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/bin/myapp"
-args = []
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp"]
 
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 
@@ -275,11 +276,12 @@ Example:
 
 **manifest.toml:**
 ```toml
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
-[workload.env]
+[env]
 LOG_LEVEL = "info"
 ```
 

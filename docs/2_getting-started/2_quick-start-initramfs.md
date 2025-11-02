@@ -71,20 +71,21 @@ version = "latest"
 ### manifest.toml (Runtime Defaults)
 
 ```toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "0.1.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 1
 memory_mb = 512
 
 [workload]
-entrypoint = "/usr/bin/myapp"
-args = []
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp"]
 
-[workload.env]
+[env]
 PORT = "8080"
 LOG_LEVEL = "info"
 
@@ -158,17 +159,19 @@ APP_VERSION = "1.0.0"
 
 ```toml
 # manifest.toml
-schema_version = "1.0"
+schema_version = "v1"
 name = "myapp"
 version = "1.0.0"
 runtime = "myapp"
 
+# Resources section is OPTIONAL - omit to use defaults (cpu_cores=2, memory_mb=2048)
 [resources]
 cpu_cores = 2
 memory_mb = 1024
 
 [workload]
-entrypoint = "/usr/bin/myapp"
+type = "exec"  # Can be "exec", "http", or "grpc"
+entrypoint = ["/usr/bin/myapp"]
 ```
 
 Then build:
