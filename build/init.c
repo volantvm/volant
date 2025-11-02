@@ -10,7 +10,11 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/reboot.h>
+#include <sys/types.h>
+// Only include sysmacros.h on Linux (macOS has makedev in sys/types.h)
+#ifdef __linux__
 #include <sys/sysmacros.h>
+#endif
 #include <limits.h>
 
 // A proper shutdown function
@@ -330,9 +334,19 @@ int main(int argc, char *argv[]) {
     ensure_console();
 
     printf("C INIT: Basic environment is up.\n");
-    
-    // Try to mount rootfs if kernel cmdline specifies root= and rootfstype=
-    // This is standard Linux behavior - if root= exists, mount it
+
+    // First, check for kestrel in the initramfs (embedded with kernel)
+    // This is the standard Volant path for OCI rootfs artifacts
+    struct stat st;
+    if (stat("/bin/kestrel", &st) == 0 && (st.st_mode & S_IXUSR)) {
+        printf("C INIT: Found kestrel in initramfs, executing...\n");
+        char *const init_argv[] = {"/bin/kestrel", NULL};
+        execv("/bin/kestrel", init_argv);
+        panic("Failed to exec kestrel from initramfs");
+    }
+
+    // No kestrel in initramfs - try to mount rootfs and search for init there
+    // This is the fallback path for custom images or initramfs-based workloads
     int mounted_rootfs = try_mount_rootfs();
     if (mounted_rootfs) {
         printf("C INIT: Rootfs mounted and pivoted.\n");
@@ -340,16 +354,13 @@ int main(int argc, char *argv[]) {
         printf("C INIT: No rootfs specified, staying in initramfs.\n");
     }
 
-    // Standard Linux init search order (try multiple possible init locations)
-    // This makes C init work with ANY userspace init, not just kestrel
-    // NOTE: Prioritize /bin/kestrel for Volant OCI images before falling back to system inits
+    // Standard Linux init search order (for custom rootfs images)
     printf("C INIT: Searching for init...\n");
 
     const char *init_paths[] = {
-        "/bin/kestrel",     // Volant's Go init (highest priority for OCI rootfs)
-        "/init",            // Custom init in rootfs root (for custom init mode)
-        "/sbin/init",       // Standard systemd/sysvinit location (fallback)
-        "/bin/init",        // Alternative location (fallback)
+        "/init",            // Custom init in rootfs root
+        "/sbin/init",       // Standard systemd/sysvinit location
+        "/bin/init",        // Alternative location
         NULL
     };
     
