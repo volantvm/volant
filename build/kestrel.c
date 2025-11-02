@@ -287,37 +287,46 @@ static const char* cmdline_get_or_default(const cmdline_t *cmd, const char *key,
 }
 
 // ============================================================================
-// BASE64 DECODING (for volant.env and volant.manifest)
+// BASE64URL DECODING (for volant.env and volant.manifest)
+// Volant uses base64url (RFC 4648) without padding
 // ============================================================================
 
-static const char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char base64url_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 static size_t base64_decode(const char *input, unsigned char **output) {
     size_t input_len = strlen(input);
-    size_t output_len = (input_len / 4) * 3;
 
-    if (input[input_len - 1] == '=') output_len--;
-    if (input[input_len - 2] == '=') output_len--;
+    // Add padding if needed for base64url
+    size_t padding = (4 - (input_len % 4)) % 4;
+
+    // Calculate output length
+    size_t output_len = ((input_len + padding) / 4) * 3;
+    if (padding > 0) output_len -= padding;
 
     *output = malloc(output_len + 1);
     if (!*output) return 0;
 
     int vals[4];
     size_t out_idx = 0;
+    size_t i = 0;
 
-    for (size_t i = 0; i < input_len; i += 4) {
+    while (i < input_len) {
+        // Read 4 characters (or less for last group)
         for (int j = 0; j < 4; j++) {
-            if (i + j >= input_len || input[i + j] == '=') {
-                vals[j] = 0;
+            if (i + j < input_len) {
+                const char *ptr = strchr(base64url_chars, input[i + j]);
+                vals[j] = ptr ? (ptr - base64url_chars) : 0;
             } else {
-                const char *ptr = strchr(base64_chars, input[i + j]);
-                vals[j] = ptr ? (ptr - base64_chars) : 0;
+                vals[j] = 0;
             }
         }
 
+        // Decode to 3 bytes
         (*output)[out_idx++] = (vals[0] << 2) | (vals[1] >> 4);
         if (out_idx < output_len) (*output)[out_idx++] = (vals[1] << 4) | (vals[2] >> 2);
         if (out_idx < output_len) (*output)[out_idx++] = (vals[2] << 6) | vals[3];
+
+        i += 4;
     }
 
     (*output)[out_idx] = '\0';
