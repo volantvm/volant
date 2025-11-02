@@ -5,7 +5,7 @@ date: "2025-11-01"
 ---
 
 
-This overview is based on the actual Volant source code. It explains how the control plane, orchestrator, networking, runtime launcher, and agent cooperate to turn a plugin manifest into a running microVM.
+This overview is based on the actual Volant source code. It explains how the control plane, orchestrator, networking, runtime launcher, and agent cooperate to turn a image manifest into a running microVM.
 
 References to source files are included so you can cross‑check details.
 
@@ -27,7 +27,7 @@ Builder (external)
 
 ## Core Concepts
 
-- Image Manifest (internal/pluginspec/spec.go)
+- Image Manifest (internal/imagespec/spec.go)
   - Declares workload, resources, networking defaults, cloud-init, actions, and boot media (exactly one of initramfs or rootfs).
   - Serialized into kernel cmdline (volant.manifest) via base64+gzip (Encode/Decode).
 
@@ -39,7 +39,7 @@ Builder (external)
 
 - Networking
   - Bridge manager and tap devices: internal/server/orchestrator/network
-  - Modes: vsock, bridged, dhcp (see pluginspec.NetworkMode). The orchestrator only allocates IP and prepares a tap when needed.
+  - Modes: vsock, bridged, dhcp (see imagespec.NetworkMode). The orchestrator only allocates IP and prepares a tap when needed.
 
 - Cloud‑init (internal/server/orchestrator/cloudinit)
   - If configured, a NoCloud seed image is constructed and attached as a read‑only disk.
@@ -132,7 +132,7 @@ Builder (external)
 - Runtime interface: internal/server/orchestrator/runtime/runtime.go
 - Network bridge/tap: internal/server/orchestrator/network
 - Cloud-init builder: internal/server/orchestrator/cloudinit
-- Image manifest spec: internal/pluginspec/spec.go
+- Image manifest spec: internal/imagespec/spec.go
 - Setup utility: internal/setup/setup.go
 
 ## Related Deep Dives

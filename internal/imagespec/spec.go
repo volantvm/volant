@@ -3,7 +3,7 @@
 // Business Source License 1.1
 // See LICENSE file in the project root for details.
 
-package pluginspec
+package imagespec
 
 import (
 	"bytes"
@@ -22,13 +22,13 @@ const (
 	CmdlineKey = "volant.manifest"
 	// RuntimeKey is the kernel parameter key used to indicate runtime identifier.
 	RuntimeKey = "volant.runtime"
-	// PluginKey is the kernel parameter key used to indicate plugin name.
-	PluginKey = "volant.plugin"
+	// ImageKey is the kernel parameter key used to indicate image name.
+	ImageKey = "volant.image"
 	// APIHostKey is the kernel parameter key for the host API hostname/IP.
 	APIHostKey = "volant.api_host"
 	// APIPortKey is the kernel parameter key for the host API port.
 	APIPortKey = "volant.api_port"
-	// RootFSKey is the kernel parameter key used to provide the plugin rootfs URL.
+	// RootFSKey is the kernel parameter key used to provide the image rootfs URL.
 	RootFSKey = "volant.rootfs"
 	// RootFSChecksumKey is the kernel parameter key for the rootfs checksum.
 	RootFSChecksumKey = "volant.rootfs_checksum"
@@ -40,7 +40,7 @@ const (
 	BootModeKey = "volant.boot"
 )
 
-// Manifest captures the metadata required to register and boot a runtime plugin.
+// Manifest captures the metadata required to register and boot a runtime image.
 type Manifest struct {
 	SchemaVersion string            `json:"schema_version"`
 	Name          string            `json:"name"`
@@ -198,13 +198,13 @@ func (d CloudInitDoc) Validate(field string) error {
 	return nil
 }
 
-// ResourceSpec captures runtime requirements for a plugin workload.
+// ResourceSpec captures runtime requirements for a image workload.
 type ResourceSpec struct {
 	CPUCores int `json:"cpu_cores"`
 	MemoryMB int `json:"memory_mb"`
 }
 
-// Action describes an API surface exposed by the plugin.
+// Action describes an API surface exposed by the image.
 type Action struct {
 	Description string `json:"description"`
 	Method      string `json:"method"`
@@ -218,7 +218,7 @@ type HealthCheck struct {
 	Timeout  int64  `json:"timeout_ms"`
 }
 
-// Workload defines how the agent should interact with the plugin runtime.
+// Workload defines how the agent should interact with the image runtime.
 type Workload struct {
 	Type       string            `json:"type"`
 	BaseURL    string            `json:"base_url,omitempty"`
@@ -233,26 +233,26 @@ func (m Manifest) Validate() error {
 	normalized.Normalize()
 
 	if strings.TrimSpace(normalized.Name) == "" {
-		return fmt.Errorf("plugin manifest: name required")
+		return fmt.Errorf("image manifest: name required")
 	}
 	if strings.TrimSpace(normalized.Version) == "" {
-		return fmt.Errorf("plugin manifest: version required")
+		return fmt.Errorf("image manifest: version required")
 	}
 	if strings.TrimSpace(normalized.Runtime) == "" {
-		return fmt.Errorf("plugin manifest: runtime required")
+		return fmt.Errorf("image manifest: runtime required")
 	}
 	if normalized.Resources.CPUCores <= 0 {
-		return fmt.Errorf("plugin manifest: cpu_cores must be > 0")
+		return fmt.Errorf("image manifest: cpu_cores must be > 0")
 	}
 	if normalized.Resources.MemoryMB <= 0 {
-		return fmt.Errorf("plugin manifest: memory_mb must be > 0")
+		return fmt.Errorf("image manifest: memory_mb must be > 0")
 	}
 	for name, action := range normalized.Actions {
 		if strings.TrimSpace(action.Method) == "" {
-			return fmt.Errorf("plugin manifest: action %s missing method", name)
+			return fmt.Errorf("image manifest: action %s missing method", name)
 		}
 		if strings.TrimSpace(action.Path) == "" {
-			return fmt.Errorf("plugin manifest: action %s missing path", name)
+			return fmt.Errorf("image manifest: action %s missing path", name)
 		}
 	}
 	if err := normalized.Workload.Validate(); err != nil {
@@ -268,21 +268,21 @@ func (m Manifest) Validate() error {
 	rootfsSet := strings.TrimSpace(normalized.RootFS.URL) != ""
 	initramfsSet := strings.TrimSpace(normalized.Initramfs.URL) != ""
 	if !rootfsSet && !initramfsSet {
-		return fmt.Errorf("plugin manifest: at least one of rootfs.url or initramfs.url must be set")
+		return fmt.Errorf("image manifest: at least one of rootfs.url or initramfs.url must be set")
 	}
 	for _, disk := range normalized.Disks {
 		if err := disk.Validate(); err != nil {
-			return fmt.Errorf("plugin manifest: %w", err)
+			return fmt.Errorf("image manifest: %w", err)
 		}
 	}
 	if normalized.CloudInit != nil {
 		if err := normalized.CloudInit.Validate(); err != nil {
-			return fmt.Errorf("plugin manifest: %w", err)
+			return fmt.Errorf("image manifest: %w", err)
 		}
 	}
 	if normalized.Network != nil {
 		if err := normalized.Network.Validate(); err != nil {
-			return fmt.Errorf("plugin manifest: %w", err)
+			return fmt.Errorf("image manifest: %w", err)
 		}
 	}
 	return nil
@@ -398,7 +398,7 @@ func (m *Manifest) Normalize() {
 		m.Labels = make(map[string]string)
 	}
 	if m.Name != "" {
-		m.Labels["volant.plugin"] = m.Name
+		m.Labels["volant.image"] = m.Name
 	}
 	if m.Runtime != "" {
 		m.Labels["volant.runtime"] = m.Runtime
@@ -423,32 +423,32 @@ func (m *Manifest) Normalize() {
 func (w Workload) Validate() error {
 	typeNormalized := strings.TrimSpace(strings.ToLower(w.Type))
 	if typeNormalized == "" {
-		return fmt.Errorf("plugin manifest: workload type required")
+		return fmt.Errorf("image manifest: workload type required")
 	}
 	switch typeNormalized {
 	case "exec":
 		// Exec workload: just needs entrypoint (executable + args)
 		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
-			return fmt.Errorf("plugin manifest: workload.entrypoint required for exec workload")
+			return fmt.Errorf("image manifest: workload.entrypoint required for exec workload")
 		}
 	case "http":
 		// HTTP workload: needs base_url and entrypoint
 		if strings.TrimSpace(w.BaseURL) == "" {
-			return fmt.Errorf("plugin manifest: workload.base_url required for http workload")
+			return fmt.Errorf("image manifest: workload.base_url required for http workload")
 		}
 		if _, err := url.Parse(w.BaseURL); err != nil {
-			return fmt.Errorf("plugin manifest: workload.base_url invalid: %w", err)
+			return fmt.Errorf("image manifest: workload.base_url invalid: %w", err)
 		}
 		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
-			return fmt.Errorf("plugin manifest: workload.entrypoint required for http workload")
+			return fmt.Errorf("image manifest: workload.entrypoint required for http workload")
 		}
 	case "grpc":
 		// gRPC workload: needs entrypoint (future support)
 		if len(w.Entrypoint) == 0 || strings.TrimSpace(w.Entrypoint[0]) == "" {
-			return fmt.Errorf("plugin manifest: workload.entrypoint required for grpc workload")
+			return fmt.Errorf("image manifest: workload.entrypoint required for grpc workload")
 		}
 	default:
-		return fmt.Errorf("plugin manifest: workload type %q not supported (supported: exec, http, grpc)", w.Type)
+		return fmt.Errorf("image manifest: workload type %q not supported (supported: exec, http, grpc)", w.Type)
 	}
 	return nil
 }
@@ -459,18 +459,18 @@ func (r RootFS) Validate() error {
 		return nil
 	}
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "file://") && !strings.HasPrefix(url, "/") {
-		return fmt.Errorf("plugin manifest: rootfs url must be http(s), file://, or absolute path")
+		return fmt.Errorf("image manifest: rootfs url must be http(s), file://, or absolute path")
 	}
 	checksum := strings.TrimSpace(r.Checksum)
 	if checksum != "" && !strings.Contains(checksum, ":") && len(checksum) < 32 {
-		return fmt.Errorf("plugin manifest: rootfs checksum should include algorithm prefix or be a sha256")
+		return fmt.Errorf("image manifest: rootfs checksum should include algorithm prefix or be a sha256")
 	}
 	format := normalizeFormat(r.Format)
 	if format == "" {
 		format = "raw"
 	}
 	if _, ok := allowedDiskFormats[format]; !ok {
-		return fmt.Errorf("plugin manifest: rootfs format %q not supported", r.Format)
+		return fmt.Errorf("image manifest: rootfs format %q not supported", r.Format)
 	}
 	return nil
 }
@@ -481,11 +481,11 @@ func (i Initramfs) Validate() error {
 		return nil
 	}
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "file://") && !strings.HasPrefix(url, "/") {
-		return fmt.Errorf("plugin manifest: initramfs url must be http(s), file://, or absolute path")
+		return fmt.Errorf("image manifest: initramfs url must be http(s), file://, or absolute path")
 	}
 	checksum := strings.TrimSpace(i.Checksum)
 	if checksum != "" && !strings.Contains(checksum, ":") && len(checksum) < 32 {
-		return fmt.Errorf("plugin manifest: initramfs checksum should include algorithm prefix or be a sha256")
+		return fmt.Errorf("image manifest: initramfs checksum should include algorithm prefix or be a sha256")
 	}
 	return nil
 }
@@ -547,7 +547,7 @@ const (
 	NetworkModeDHCP NetworkMode = "dhcp"
 )
 
-// NetworkConfig defines plugin-level network configuration defaults.
+// NetworkConfig defines image-level network configuration defaults.
 type NetworkConfig struct {
 	Mode       NetworkMode `json:"mode"`
 	Subnet     string      `json:"subnet,omitempty"`      // For bridged mode: CIDR (e.g., "10.1.0.0/24")

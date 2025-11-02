@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/db"
 )
 
@@ -38,21 +38,21 @@ type Expose struct {
 
 // Config represents the persisted, user-editable configuration of a VM.
 type Config struct {
-	Plugin         string               `json:"plugin"`
-	Runtime        string               `json:"runtime,omitempty"`
-	KernelCmdline  string               `json:"kernel_cmdline,omitempty"`
-	KernelOverride string               `json:"kernel_override,omitempty"`
-	Resources      Resources            `json:"resources"`
-	API            API                  `json:"api,omitempty"`
-	Manifest       *pluginspec.Manifest `json:"manifest,omitempty"`
+	Image          string              `json:"image"`
+	Runtime        string              `json:"runtime,omitempty"`
+	KernelCmdline  string              `json:"kernel_cmdline,omitempty"`
+	KernelOverride string              `json:"kernel_override,omitempty"`
+	Resources      Resources           `json:"resources"`
+	API            API                 `json:"api,omitempty"`
+	Manifest       *imagespec.Manifest `json:"manifest,omitempty"`
 	// Devices allows VM-level device passthrough overrides (takes precedence over manifest.devices)
-	Devices   *pluginspec.DeviceConfig  `json:"devices,omitempty"`
-	Metadata  map[string]any            `json:"metadata,omitempty"`
-	Expose    []Expose                  `json:"expose,omitempty"`
-	CloudInit *pluginspec.CloudInit     `json:"cloud_init,omitempty"`
-	Network   *pluginspec.NetworkConfig `json:"network,omitempty"`
-	Initramfs *pluginspec.Initramfs     `json:"initramfs,omitempty"`
-	RootFS    *pluginspec.RootFS        `json:"rootfs,omitempty"`
+	Devices   *imagespec.DeviceConfig  `json:"devices,omitempty"`
+	Metadata  map[string]any           `json:"metadata,omitempty"`
+	Expose    []Expose                 `json:"expose,omitempty"`
+	CloudInit *imagespec.CloudInit     `json:"cloud_init,omitempty"`
+	Network   *imagespec.NetworkConfig `json:"network,omitempty"`
+	Initramfs *imagespec.Initramfs     `json:"initramfs,omitempty"`
+	RootFS    *imagespec.RootFS        `json:"rootfs,omitempty"`
 }
 
 // Versioned associates a configuration with its version metadata.
@@ -72,20 +72,20 @@ type HistoryEntry struct {
 
 // Patch represents a partial configuration update request.
 type Patch struct {
-	Runtime       *string                   `json:"runtime,omitempty"`
-	KernelCmdline *string                   `json:"kernel_cmdline,omitempty"`
-	Resources     *ResourcesPatch           `json:"resources,omitempty"`
-	API           *APIPatch                 `json:"api,omitempty"`
-	Manifest      *pluginspec.Manifest      `json:"manifest,omitempty"`
-	Devices       *pluginspec.DeviceConfig  `json:"devices,omitempty"`
-	Metadata      *map[string]any           `json:"metadata,omitempty"`
-	Expose        *[]Expose                 `json:"expose,omitempty"`
-	CloudInit     *pluginspec.CloudInit     `json:"cloud_init,omitempty"`
-	Network       *pluginspec.NetworkConfig `json:"network,omitempty"`
+	Runtime       *string                  `json:"runtime,omitempty"`
+	KernelCmdline *string                  `json:"kernel_cmdline,omitempty"`
+	Resources     *ResourcesPatch          `json:"resources,omitempty"`
+	API           *APIPatch                `json:"api,omitempty"`
+	Manifest      *imagespec.Manifest      `json:"manifest,omitempty"`
+	Devices       *imagespec.DeviceConfig  `json:"devices,omitempty"`
+	Metadata      *map[string]any          `json:"metadata,omitempty"`
+	Expose        *[]Expose                `json:"expose,omitempty"`
+	CloudInit     *imagespec.CloudInit     `json:"cloud_init,omitempty"`
+	Network       *imagespec.NetworkConfig `json:"network,omitempty"`
 	// Optional boot media overrides
-	KernelOverride *string               `json:"kernel_override,omitempty"`
-	Initramfs      *pluginspec.Initramfs `json:"initramfs,omitempty"`
-	RootFS         *pluginspec.RootFS    `json:"rootfs,omitempty"`
+	KernelOverride *string              `json:"kernel_override,omitempty"`
+	Initramfs      *imagespec.Initramfs `json:"initramfs,omitempty"`
+	RootFS         *imagespec.RootFS    `json:"rootfs,omitempty"`
 }
 
 // ResourcesPatch allows partial updates of compute resources.
@@ -144,7 +144,7 @@ func (c *Config) Normalize() {
 	if c == nil {
 		return
 	}
-	c.Plugin = strings.TrimSpace(c.Plugin)
+	c.Image = strings.TrimSpace(c.Image)
 	c.Runtime = strings.TrimSpace(c.Runtime)
 	c.KernelCmdline = strings.TrimSpace(c.KernelCmdline)
 	c.KernelOverride = strings.TrimSpace(c.KernelOverride)
@@ -185,8 +185,8 @@ func (c *Config) Normalize() {
 
 // Validate performs semantic validation on the configuration.
 func (c Config) Validate() error {
-	if strings.TrimSpace(c.Plugin) == "" {
-		return fmt.Errorf("vmconfig: plugin is required")
+	if strings.TrimSpace(c.Image) == "" {
+		return fmt.Errorf("vmconfig: image is required")
 	}
 	if strings.TrimSpace(c.Runtime) == "" {
 		return fmt.Errorf("vmconfig: runtime is required")
@@ -373,7 +373,7 @@ func FromHistory(entry db.VMConfigHistoryEntry) (HistoryEntry, error) {
 	return HistoryEntry{
 		ID:        entry.ID,
 		Version:   entry.Version,
-		UpdatedAt:   entry.UpdatedAt,
+		UpdatedAt: entry.UpdatedAt,
 		Config:    cfg,
 	}, nil
 }
@@ -381,23 +381,23 @@ func FromHistory(entry db.VMConfigHistoryEntry) (HistoryEntry, error) {
 // Overrides represents runtime overrides that can be applied when creating a VM.
 // These take precedence over manifest defaults.
 type Overrides struct {
-	CPUCores     *int
-	MemoryMB     *int
-	Env          map[string]string
-	ExposePorts  []Expose
-	NetworkMode  *string
+	CPUCores    *int
+	MemoryMB    *int
+	Env         map[string]string
+	ExposePorts []Expose
+	NetworkMode *string
 }
 
 // FromManifestWithOverrides creates a Config from a manifest and applies runtime overrides.
 // The hierarchy is: Overrides > Manifest defaults > System defaults.
-func FromManifestWithOverrides(manifest *pluginspec.Manifest, overrides Overrides, pluginName, runtime string) (Config, error) {
+func FromManifestWithOverrides(manifest *imagespec.Manifest, overrides Overrides, imageName, runtime string) (Config, error) {
 	if manifest == nil {
 		return Config{}, fmt.Errorf("vmconfig: manifest is required")
 	}
 
 	// Start with manifest defaults
 	cfg := Config{
-		Plugin:   strings.TrimSpace(pluginName),
+		Image:    strings.TrimSpace(imageName),
 		Runtime:  strings.TrimSpace(runtime),
 		Manifest: manifest,
 	}
@@ -446,7 +446,7 @@ func FromManifestWithOverrides(manifest *pluginspec.Manifest, overrides Override
 		// Apply network mode override if provided
 		if overrides.NetworkMode != nil {
 			networkCopy := *manifest.Network
-			networkCopy.Mode = pluginspec.NetworkMode(*overrides.NetworkMode)
+			networkCopy.Mode = imagespec.NetworkMode(*overrides.NetworkMode)
 			cfg.Network = &networkCopy
 		}
 	}

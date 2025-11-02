@@ -5,7 +5,7 @@ Parameters
 Licensor: "HYPR. PTE. LTD."
 Licensed Work: "Volant"
 Use: "Cloud infrastructure management and microVM orchestration"
-Additional Use Grant: "You may use the Licensed Work to develop and distribute your own plugins, manifests, and runtime artifacts that interface with the Licensed Work's API, provided that such plugins do not include any source code from the Licensed Work other than API definitions and interfaces."
+Additional Use Grant: "You may use the Licensed Work to develop and distribute your own images, manifests, and runtime artifacts that interface with the Licensed Work's API, provided that such images do not include any source code from the Licensed Work other than API definitions and interfaces."
 Change Date: 2029-10-04
 Change License: Apache License 2.0
 

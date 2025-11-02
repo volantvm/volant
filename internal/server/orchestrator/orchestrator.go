@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/volantvm/volant/internal/drift/routes"
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/db"
 	"github.com/volantvm/volant/internal/server/devicemanager"
 	"github.com/volantvm/volant/internal/server/driftclient"
@@ -66,16 +66,16 @@ type Engine interface {
 // CreateVMRequest captures the inputs required to instantiate a VM lifecycle.
 type CreateVMRequest struct {
 	Name              string
-	Plugin            string
+	Image             string
 	Runtime           string
 	KernelCmdlineHint string
-	Manifest          *pluginspec.Manifest
+	Manifest          *imagespec.Manifest
 	APIHost           string
 	APIPort           string
 	Config            *vmconfig.Config
 	GroupID           *int64
 	// Overrides allows runtime-specific configuration that takes precedence over manifest defaults
-	Overrides         vmconfig.Overrides
+	Overrides vmconfig.Overrides
 }
 
 // Deployment represents a managed group of VM replicas.
@@ -298,11 +298,11 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	}
 
 	var manifestRuntime string
-	pluginName := ""
+	imageName := ""
 	if req.Manifest != nil {
 		req.Manifest.Normalize()
 		manifestRuntime = strings.TrimSpace(req.Manifest.Runtime)
-		pluginName = strings.TrimSpace(req.Manifest.Name)
+		imageName = strings.TrimSpace(req.Manifest.Name)
 	}
 
 	req.Runtime = strings.TrimSpace(req.Runtime)
@@ -310,7 +310,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		req.Runtime = manifestRuntime
 	}
 	if req.Runtime == "" {
-		req.Runtime = pluginName
+		req.Runtime = imageName
 	}
 	if req.Runtime == "" {
 		return nil, fmt.Errorf("orchestrator: runtime required")
@@ -344,7 +344,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		apiPort = e.controlPort
 	}
 
-	var manifestForConfig *pluginspec.Manifest
+	var manifestForConfig *imagespec.Manifest
 	if req.Manifest != nil {
 		manifestCopy := *req.Manifest
 		manifestCopy.Normalize()
@@ -356,12 +356,12 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	if req.Config != nil {
 		// Use provided config directly (for backwards compatibility)
 		configToStore = req.Config.Clone()
-		configToStore.Plugin = pluginName
+		configToStore.Image = imageName
 		configToStore.Runtime = req.Runtime
 	} else if manifestForConfig != nil {
 		// Use new merge logic: apply overrides on top of manifest defaults
 		var err error
-		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, req.Overrides, pluginName, req.Runtime)
+		configToStore, err = vmconfig.FromManifestWithOverrides(manifestForConfig, req.Overrides, imageName, req.Runtime)
 		if err != nil {
 			return nil, fmt.Errorf("build vm config: %w", err)
 		}
@@ -473,7 +473,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 
 	var seedDisk *runtime.Disk
 	var cloudInitRecord *db.VMCloudInit
-	overrideCloudInit := (*pluginspec.CloudInit)(nil)
+	overrideCloudInit := (*imagespec.CloudInit)(nil)
 	if configToStore.CloudInit != nil {
 		overrideCopy := *configToStore.CloudInit
 		overrideCopy.Normalize()
@@ -558,12 +558,12 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	}
 
 	cmdArgs := map[string]string{
-		pluginspec.RuntimeKey: req.Runtime,
-		pluginspec.APIHostKey: apiHost,
-		pluginspec.APIPortKey: apiPort,
+		imagespec.RuntimeKey: req.Runtime,
+		imagespec.APIHostKey: apiHost,
+		imagespec.APIPortKey: apiPort,
 	}
-	if pluginName != "" {
-		cmdArgs[pluginspec.PluginKey] = pluginName
+	if imageName != "" {
+		cmdArgs[imagespec.ImageKey] = imageName
 	}
 
 	// Add DNS configuration for service discovery
@@ -571,12 +571,12 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	cmdArgs["volant.dns_server"] = e.hostIP.String()
 	cmdArgs["volant.dns_search"] = "volant"
 	if req.Manifest != nil {
-		encodedManifest, err := pluginspec.Encode(*req.Manifest)
+		encodedManifest, err := imagespec.Encode(*req.Manifest)
 		if err != nil {
 			e.logger.Error("encode manifest", "vm", req.Name, "error", err)
 			return nil, fmt.Errorf("orchestrator: encode manifest: %w", err)
 		}
-		cmdArgs[pluginspec.CmdlineKey] = encodedManifest
+		cmdArgs[imagespec.CmdlineKey] = encodedManifest
 	}
 
 	// Encode environment variables into kernel cmdline
@@ -629,16 +629,16 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	// If RootFS is set, ensure default device/fstype args unless already supplied by the runtime
 	if spec.RootFS != "" {
 		rootDevice := "vda"
-		if _, ok := cmdArgs[pluginspec.RootFSDeviceKey]; !ok {
-			cmdArgs[pluginspec.RootFSDeviceKey] = rootDevice
+		if _, ok := cmdArgs[imagespec.RootFSDeviceKey]; !ok {
+			cmdArgs[imagespec.RootFSDeviceKey] = rootDevice
 		}
-		
+
 		rootFSType := detectRootFSType(spec.RootFS)
-		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
+		if _, ok := cmdArgs[imagespec.RootFSFSTypeKey]; !ok {
 			// Detect filesystem type from file extension
-			cmdArgs[pluginspec.RootFSFSTypeKey] = rootFSType
+			cmdArgs[imagespec.RootFSFSTypeKey] = rootFSType
 		}
-		
+
 		// CRITICAL: Add standard kernel boot parameters (not just volant.* parameters)
 		// The kernel needs root= and rootfstype= to mount the rootfs
 		if _, ok := cmdArgs["root"]; !ok {
@@ -647,7 +647,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		if _, ok := cmdArgs["rootfstype"]; !ok {
 			cmdArgs["rootfstype"] = rootFSType
 		}
-		
+
 		// For squashfs, add overlay_size parameter for writable layer
 		if rootFSType == "squashfs" {
 			if _, ok := cmdArgs["overlay_size"]; !ok {
@@ -657,7 +657,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	}
 
 	// Handle VFIO GPU/device passthrough if configured (prefer VM-level overrides)
-	var devCfg *pluginspec.DeviceConfig
+	var devCfg *imagespec.DeviceConfig
 	if configToStore.Devices != nil {
 		devCfg = configToStore.Devices
 	} else if req.Manifest != nil && req.Manifest.Devices != nil {
@@ -846,7 +846,7 @@ func (e *engine) destroyVM(ctx context.Context, name string, reconcile bool) (*d
 		if cfgRecord, err := cfgRepo.GetCurrent(ctx, vmRecord.ID); err == nil && cfgRecord != nil {
 			versioned, decodeErr := vmconfig.FromDB(*cfgRecord)
 			if decodeErr == nil {
-				var devCfg *pluginspec.DeviceConfig
+				var devCfg *imagespec.DeviceConfig
 				if versioned.Config.Devices != nil {
 					devCfg = versioned.Config.Devices
 				} else if versioned.Config.Manifest != nil {
@@ -1133,21 +1133,21 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 	}
 
 	cmdArgs := map[string]string{
-		pluginspec.RuntimeKey: cfg.Runtime,
-		pluginspec.APIHostKey: apiHost,
-		pluginspec.APIPortKey: apiPort,
+		imagespec.RuntimeKey: cfg.Runtime,
+		imagespec.APIHostKey: apiHost,
+		imagespec.APIPortKey: apiPort,
 	}
-	pluginName := strings.TrimSpace(cfg.Plugin)
-	if pluginName != "" {
-		cmdArgs[pluginspec.PluginKey] = pluginName
+	imageName := strings.TrimSpace(cfg.Image)
+	if imageName != "" {
+		cmdArgs[imagespec.ImageKey] = imageName
 	}
-	encodedManifest, err := pluginspec.Encode(*manifest)
+	encodedManifest, err := imagespec.Encode(*manifest)
 	if err != nil {
 		_ = e.network.CleanupTap(ctx, tapName)
 		e.setVMState(ctx, vmRecord.ID, db.VMStatusStopped, nil)
 		return nil, fmt.Errorf("orchestrator: encode manifest: %w", err)
 	}
-	cmdArgs[pluginspec.CmdlineKey] = encodedManifest
+	cmdArgs[imagespec.CmdlineKey] = encodedManifest
 	spec.Args = cmdArgs
 	// Allow both initramfs and rootfs to be provided by the manifest
 	if url := strings.TrimSpace(manifest.Initramfs.URL); url != "" {
@@ -1174,16 +1174,16 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 	spec.KernelOverride = strings.TrimSpace(cfg.KernelOverride)
 	if spec.RootFS != "" {
 		rootDevice := "vda"
-		if _, ok := cmdArgs[pluginspec.RootFSDeviceKey]; !ok {
-			cmdArgs[pluginspec.RootFSDeviceKey] = rootDevice
+		if _, ok := cmdArgs[imagespec.RootFSDeviceKey]; !ok {
+			cmdArgs[imagespec.RootFSDeviceKey] = rootDevice
 		}
-		
+
 		rootFSType := detectRootFSType(spec.RootFS)
-		if _, ok := cmdArgs[pluginspec.RootFSFSTypeKey]; !ok {
+		if _, ok := cmdArgs[imagespec.RootFSFSTypeKey]; !ok {
 			// Detect filesystem type from file extension
-			cmdArgs[pluginspec.RootFSFSTypeKey] = rootFSType
+			cmdArgs[imagespec.RootFSFSTypeKey] = rootFSType
 		}
-		
+
 		// CRITICAL: Add standard kernel boot parameters (not just volant.* parameters)
 		// The kernel needs root= and rootfstype= to mount the rootfs
 		if _, ok := cmdArgs["root"]; !ok {
@@ -1192,7 +1192,7 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 		if _, ok := cmdArgs["rootfstype"]; !ok {
 			cmdArgs["rootfstype"] = rootFSType
 		}
-		
+
 		// For squashfs, add overlay_size parameter for writable layer
 		if rootFSType == "squashfs" {
 			if _, ok := cmdArgs["overlay_size"]; !ok {
@@ -1202,7 +1202,7 @@ func (e *engine) StartVM(ctx context.Context, name string) (*db.VM, error) {
 	}
 
 	// Handle VFIO device passthrough if configured (prefer VM-level overrides)
-	var devCfg *pluginspec.DeviceConfig
+	var devCfg *imagespec.DeviceConfig
 	if cfg.Devices != nil {
 		devCfg = cfg.Devices
 	} else if manifest != nil && manifest.Devices != nil {
@@ -1762,7 +1762,7 @@ func (e *engine) reconcileDeployment(ctx context.Context, group db.VMGroup) (Dep
 			cfgClone.Normalize()
 			request := CreateVMRequest{
 				Name:              vmName,
-				Plugin:            cfgClone.Plugin,
+				Image:             cfgClone.Image,
 				Runtime:           cfgClone.Runtime,
 				KernelCmdlineHint: cfgClone.KernelCmdline,
 				Manifest:          &manifestCopy,
@@ -1820,34 +1820,34 @@ func (e *engine) normalizeDeploymentConfig(ctx context.Context, cfg vmconfig.Con
 	clone := cfg.Clone()
 	clone.Normalize()
 
-	// Default runtime to plugin name if not specified
+	// Default runtime to image name if not specified
 	if strings.TrimSpace(clone.Runtime) == "" {
-		clone.Runtime = strings.TrimSpace(clone.Plugin)
+		clone.Runtime = strings.TrimSpace(clone.Image)
 	}
 
-	// If plugin is specified but manifest is missing, load manifest from installed plugin
-	pluginName := strings.TrimSpace(clone.Plugin)
-	if pluginName != "" && clone.Manifest == nil {
-		plugin, err := e.store.Queries().Images().GetByName(ctx, pluginName)
+	// If image is specified but manifest is missing, load manifest from installed image
+	imageName := strings.TrimSpace(clone.Image)
+	if imageName != "" && clone.Manifest == nil {
+		image, err := e.store.Queries().Images().GetByName(ctx, imageName)
 		if err != nil {
-			return vmconfig.Config{}, fmt.Errorf("lookup plugin %s: %w", pluginName, err)
+			return vmconfig.Config{}, fmt.Errorf("lookup image %s: %w", imageName, err)
 		}
-		if plugin == nil {
-			return vmconfig.Config{}, fmt.Errorf("plugin %s not installed", pluginName)
+		if image == nil {
+			return vmconfig.Config{}, fmt.Errorf("image %s not installed", imageName)
 		}
 
-		// Parse manifest from plugin metadata
-		var manifest pluginspec.Manifest
-		if err := json.Unmarshal(plugin.Metadata, &manifest); err != nil {
-			return vmconfig.Config{}, fmt.Errorf("parse plugin %s manifest: %w", pluginName, err)
+		// Parse manifest from image metadata
+		var manifest imagespec.Manifest
+		if err := json.Unmarshal(image.Metadata, &manifest); err != nil {
+			return vmconfig.Config{}, fmt.Errorf("parse image %s manifest: %w", imageName, err)
 		}
 		manifest.Normalize()
 		clone.Manifest = &manifest
 	}
 
-	// Infer plugin name from manifest if not set
-	if strings.TrimSpace(clone.Plugin) == "" && clone.Manifest != nil {
-		clone.Plugin = strings.TrimSpace(clone.Manifest.Name)
+	// Infer image name from manifest if not set
+	if strings.TrimSpace(clone.Image) == "" && clone.Manifest != nil {
+		clone.Image = strings.TrimSpace(clone.Manifest.Name)
 	}
 
 	if err := clone.Validate(); err != nil {
@@ -1856,12 +1856,12 @@ func (e *engine) normalizeDeploymentConfig(ctx context.Context, cfg vmconfig.Con
 	return clone, nil
 }
 
-func (e *engine) prepareCloudInitSeed(ctx context.Context, vm *db.VM, manifest *pluginspec.Manifest, override *pluginspec.CloudInit) (*pluginspec.CloudInit, *db.VMCloudInit, *runtime.Disk, error) {
+func (e *engine) prepareCloudInitSeed(ctx context.Context, vm *db.VM, manifest *imagespec.Manifest, override *imagespec.CloudInit) (*imagespec.CloudInit, *db.VMCloudInit, *runtime.Disk, error) {
 	if vm == nil {
 		return nil, nil, nil, fmt.Errorf("prepare cloud-init: vm required")
 	}
 
-	base := (*pluginspec.CloudInit)(nil)
+	base := (*imagespec.CloudInit)(nil)
 	if manifest != nil && manifest.CloudInit != nil {
 		copy := *manifest.CloudInit
 		copy.Normalize()
@@ -1939,11 +1939,11 @@ func (e *engine) prepareCloudInitSeed(ctx context.Context, vm *db.VM, manifest *
 	return merged, record, seedDisk, nil
 }
 
-func mergeCloudInit(base, override *pluginspec.CloudInit) *pluginspec.CloudInit {
+func mergeCloudInit(base, override *imagespec.CloudInit) *imagespec.CloudInit {
 	if base == nil && override == nil {
 		return nil
 	}
-	result := pluginspec.CloudInit{}
+	result := imagespec.CloudInit{}
 	if base != nil {
 		result = *base
 	}
@@ -1962,14 +1962,14 @@ func mergeCloudInit(base, override *pluginspec.CloudInit) *pluginspec.CloudInit 
 	return &result
 }
 
-func mergeCloudInitDoc(base, override pluginspec.CloudInitDoc) pluginspec.CloudInitDoc {
+func mergeCloudInitDoc(base, override imagespec.CloudInitDoc) imagespec.CloudInitDoc {
 	if strings.TrimSpace(override.Content) != "" || strings.TrimSpace(override.Path) != "" || override.Inline {
 		return override
 	}
 	return base
 }
 
-func buildAdditionalDisks(manifest *pluginspec.Manifest) []runtime.Disk {
+func buildAdditionalDisks(manifest *imagespec.Manifest) []runtime.Disk {
 	if manifest == nil {
 		return nil
 	}
@@ -2150,7 +2150,7 @@ func detectRootFSType(rootfsPath string) string {
 	if rootfsPath == "" {
 		return "ext4" // default fallback
 	}
-	
+
 	// Detect from file extension
 	switch {
 	case strings.HasSuffix(rootfsPath, ".squashfs"):
@@ -2226,13 +2226,13 @@ func isUsableAdvertiseHost(host string) bool {
 }
 
 // resolveNetworkConfig determines the effective network configuration for a VM.
-// VM-level config overrides plugin-level defaults.
-func resolveNetworkConfig(manifest *pluginspec.Manifest, vmConfig *vmconfig.Config) *pluginspec.NetworkConfig {
+// VM-level config overrides image-level defaults.
+func resolveNetworkConfig(manifest *imagespec.Manifest, vmConfig *vmconfig.Config) *imagespec.NetworkConfig {
 	// VM config takes precedence
 	if vmConfig != nil && vmConfig.Network != nil {
 		return vmConfig.Network
 	}
-	// Fall back to plugin manifest
+	// Fall back to image manifest
 	if manifest != nil && manifest.Network != nil {
 		return manifest.Network
 	}
@@ -2241,24 +2241,24 @@ func resolveNetworkConfig(manifest *pluginspec.Manifest, vmConfig *vmconfig.Conf
 }
 
 // needsIPAllocation returns true if the network mode requires host-managed IP allocation.
-func needsIPAllocation(netCfg *pluginspec.NetworkConfig) bool {
+func needsIPAllocation(netCfg *imagespec.NetworkConfig) bool {
 	if netCfg == nil {
 		return true // Default behavior: allocate IP
 	}
-	mode := pluginspec.NetworkMode(strings.ToLower(strings.TrimSpace(string(netCfg.Mode))))
+	mode := imagespec.NetworkMode(strings.ToLower(strings.TrimSpace(string(netCfg.Mode))))
 	// Only bridged mode with host-managed IPs needs allocation
 	// vsock and dhcp modes do not need host IP allocation
-	return mode == pluginspec.NetworkModeBridged || mode == ""
+	return mode == imagespec.NetworkModeBridged || mode == ""
 }
 
 // needsTapDevice returns true if the network mode requires a tap device.
-func needsTapDevice(netCfg *pluginspec.NetworkConfig) bool {
+func needsTapDevice(netCfg *imagespec.NetworkConfig) bool {
 	if netCfg == nil {
 		return true // Default behavior: create tap
 	}
-	mode := pluginspec.NetworkMode(strings.ToLower(strings.TrimSpace(string(netCfg.Mode))))
+	mode := imagespec.NetworkMode(strings.ToLower(strings.TrimSpace(string(netCfg.Mode))))
 	// vsock mode doesn't need a tap device
-	return mode != pluginspec.NetworkModeVsock
+	return mode != imagespec.NetworkModeVsock
 }
 
 func (e *engine) setVMState(ctx context.Context, vmID int64, status db.VMStatus, pid *int64) {
@@ -2269,13 +2269,13 @@ func (e *engine) setVMState(ctx context.Context, vmID int64, status db.VMStatus,
 	}
 }
 
-func (e *engine) computeDriftRoutes(vm db.VM, netCfg *pluginspec.NetworkConfig, exposes []vmconfig.Expose) ([]routes.Route, error) {
+func (e *engine) computeDriftRoutes(vm db.VM, netCfg *imagespec.NetworkConfig, exposes []vmconfig.Expose) ([]routes.Route, error) {
 	defaultMode := ""
 	if netCfg != nil {
 		defaultMode = strings.TrimSpace(strings.ToLower(string(netCfg.Mode)))
 	}
 	if defaultMode == "" {
-		defaultMode = string(pluginspec.NetworkModeBridged)
+		defaultMode = string(imagespec.NetworkModeBridged)
 	}
 
 	result := make([]routes.Route, 0, len(exposes))
@@ -2301,7 +2301,7 @@ func (e *engine) computeDriftRoutes(vm db.VM, netCfg *pluginspec.NetworkConfig, 
 			mode = defaultMode
 		}
 		if mode == "" {
-			mode = string(pluginspec.NetworkModeBridged)
+			mode = string(imagespec.NetworkModeBridged)
 		}
 
 		backend := routes.Backend{Port: uint16(rule.Port)}
@@ -2357,7 +2357,7 @@ func (e *engine) computeDriftRoutes(vm db.VM, netCfg *pluginspec.NetworkConfig, 
 	return result, nil
 }
 
-func (e *engine) applyDriftRoutes(ctx context.Context, vm db.VM, netCfg *pluginspec.NetworkConfig, exposes []vmconfig.Expose) error {
+func (e *engine) applyDriftRoutes(ctx context.Context, vm db.VM, netCfg *imagespec.NetworkConfig, exposes []vmconfig.Expose) error {
 	if e.drift == nil || len(exposes) == 0 {
 		return nil
 	}

@@ -11,10 +11,10 @@ import "github.com/spf13/cobra"
 func newBrowsersCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "browsers",
-		Short: "Browser commands moved to plugin distribution",
+		Short: "Browser commands moved to image distribution",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.Println("browser automation commands now live in the browser plugin CLI")
-			cmd.Println("Install the browser plugin distribution and use its CLI wrapper.")
+			cmd.Println("browser automation commands now live in the browser image CLI")
+			cmd.Println("Install the browser image distribution and use its CLI wrapper.")
 			return nil
 		},
 	}

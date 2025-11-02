@@ -102,7 +102,7 @@
           "network": {
             "$ref": "#/components/schemas/NetworkConfig"
           },
-          "plugin": {
+          "image": {
             "type": "string"
           },
           "resources": {
@@ -404,7 +404,7 @@
         },
         "type": "object"
       },
-      "pluginSummary": {
+      "imageSummary": {
         "properties": {
           "enabled": {
             "type": "boolean"
@@ -1320,16 +1320,16 @@
                       },
                       "type": "object"
                     },
-                    "enabled_plugins": {
+                    "enabled_images": {
                       "type": "integer"
                     },
-                    "plugins": {
+                    "images": {
                       "items": {
-                        "$ref": "#/components/schemas/pluginSummary"
+                        "$ref": "#/components/schemas/imageSummary"
                       },
                       "type": "array"
                     },
-                    "total_plugins": {
+                    "total_images": {
                       "type": "integer"
                     },
                     "total_vms": {
@@ -2127,7 +2127,7 @@
                   "overrides": {
                     "$ref": "#/components/schemas/Overrides"
                   },
-                  "plugin": {
+                  "image": {
                     "type": "string"
                   },
                   "runtime": {

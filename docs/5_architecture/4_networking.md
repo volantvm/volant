@@ -5,7 +5,7 @@ date: "2025-11-01"
 ---
 
 
-Volant supports three network modes declared in the plugin manifest (internal/pluginspec/spec.go) and overridable per-VM via vmconfig.Config.
+Volant supports three network modes declared in the image manifest (internal/imagespec/spec.go) and overridable per-VM via vmconfig.Config.
 
 ## Modes
 

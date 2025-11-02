@@ -30,7 +30,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/mdlayher/vsock"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 )
 
 const (
@@ -66,7 +66,7 @@ type App struct {
 	timeout        time.Duration
 	log            *log.Logger
 	started        time.Time
-	manifest       *pluginspec.Manifest
+	manifest       *imagespec.Manifest
 	client         *http.Client
 	ctx            context.Context
 	mu             sync.Mutex
@@ -594,9 +594,9 @@ func configureDNSFromCmdline(logger *log.Logger) error {
 	return nil
 }
 
-func resolveManifest() (*pluginspec.Manifest, error) {
+func resolveManifest() (*imagespec.Manifest, error) {
 	if encoded := strings.TrimSpace(os.Getenv("VOLANT_MANIFEST")); encoded != "" {
-		manifest, err := pluginspec.Decode(encoded)
+		manifest, err := imagespec.Decode(encoded)
 		if err != nil {
 			return nil, err
 		}
@@ -609,7 +609,7 @@ func resolveManifest() (*pluginspec.Manifest, error) {
 	}
 	fields := strings.Fields(string(data))
 	var (
-		pluginName       string
+		imageName        string
 		apiHost, apiPort string
 		manifestEncoded  string
 	)
@@ -619,29 +619,29 @@ func resolveManifest() (*pluginspec.Manifest, error) {
 			continue
 		}
 		switch parts[0] {
-		case pluginspec.APIHostKey:
+		case imagespec.APIHostKey:
 			apiHost = parts[1]
-		case pluginspec.APIPortKey:
+		case imagespec.APIPortKey:
 			apiPort = parts[1]
-		case pluginspec.PluginKey:
-			pluginName = parts[1]
-		case pluginspec.CmdlineKey:
+		case imagespec.ImageKey:
+			imageName = parts[1]
+		case imagespec.CmdlineKey:
 			manifestEncoded = parts[1]
 		}
 	}
 	if strings.TrimSpace(manifestEncoded) != "" {
-		manifest, err := pluginspec.Decode(manifestEncoded)
+		manifest, err := imagespec.Decode(manifestEncoded)
 		if err != nil {
 			return nil, fmt.Errorf("decode manifest: %w", err)
 		}
 		manifest.Normalize()
 		return &manifest, nil
 	}
-	if apiHost == "" || apiPort == "" || pluginName == "" {
+	if apiHost == "" || apiPort == "" || imageName == "" {
 		return nil, nil
 	}
 
-	manifestURL := fmt.Sprintf("http://%s:%s/api/v1/plugins/%s/manifest", apiHost, apiPort, pluginName)
+	manifestURL := fmt.Sprintf("http://%s:%s/api/v1/images/%s/manifest", apiHost, apiPort, imageName)
 	resp, err := http.Get(manifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errManifestFetch, err)
@@ -651,7 +651,7 @@ func resolveManifest() (*pluginspec.Manifest, error) {
 		return nil, fmt.Errorf("%w: unexpected status %d", errManifestFetch, resp.StatusCode)
 	}
 
-	var manifest pluginspec.Manifest
+	var manifest imagespec.Manifest
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
 		return nil, fmt.Errorf("%w: %v", errManifestFetch, err)
 	}
@@ -1156,7 +1156,7 @@ func (a *App) stopWorkload() {
 	a.mu.Unlock()
 }
 
-func (a *App) waitForHealth(parent context.Context, base *url.URL, hc pluginspec.HealthCheck) error {
+func (a *App) waitForHealth(parent context.Context, base *url.URL, hc imagespec.HealthCheck) error {
 	endpoint := strings.TrimSpace(hc.Endpoint)
 	if endpoint == "" {
 		return nil
@@ -1204,7 +1204,7 @@ func (a *App) waitForHealth(parent context.Context, base *url.URL, hc pluginspec
 	}
 }
 
-func workloadSignature(w pluginspec.Workload) string {
+func workloadSignature(w imagespec.Workload) string {
 	parts := make([]string, 0, len(w.Entrypoint)+len(w.Env)+1)
 	parts = append(parts, strings.Join(w.Entrypoint, "||"))
 	if len(w.Env) > 0 {
@@ -1237,12 +1237,12 @@ func (a *App) refreshManifest() error {
 
 	host := envValue("volant.api_host")
 	port := envValue("volant.api_port")
-	plugin := envValue("volant.plugin")
-	if host == "" || port == "" || plugin == "" {
+	image := envValue("volant.image")
+	if host == "" || port == "" || image == "" {
 		return nil
 	}
 
-	url := fmt.Sprintf("http://%s:%s/api/v1/plugins/%s/manifest", host, port, plugin)
+	url := fmt.Sprintf("http://%s:%s/api/v1/images/%s/manifest", host, port, image)
 	resp, err := a.client.Get(url)
 	if err != nil {
 		return err
@@ -1252,13 +1252,13 @@ func (a *App) refreshManifest() error {
 		return fmt.Errorf("manifest fetch status %d", resp.StatusCode)
 	}
 
-	var manifest pluginspec.Manifest
+	var manifest imagespec.Manifest
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
 		return err
 	}
 	manifest.Normalize()
 	a.manifest = &manifest
-	a.log.Printf("manifest fetched for plugin %s", plugin)
+	a.log.Printf("manifest fetched for image %s", image)
 	if err := a.startWorkload(); err != nil {
 		a.log.Printf("workload start failed after manifest fetch: %v", err)
 	}

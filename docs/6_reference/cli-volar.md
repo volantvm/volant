@@ -17,7 +17,7 @@ Source: internal/cli/standard.
   - list — list VMs
   - get <name> — show details
   - create <name> [flags] — create a VM
-    - --plugin <name>
+    - --image <name>
     - --runtime <type>
     - --cpu <n>
     - --memory <mb>
@@ -36,10 +36,10 @@ Source: internal/cli/standard.
     - set <name> --file <path>
     - history <name> [--limit N]
   - console <name> [--socket <path>] — attach to serial socket
-  - operations <vm> — list operations from the VM’s plugin OpenAPI
+  - operations <vm> — list operations from the VM’s image OpenAPI
   - call <vm> <operation-id> [--query k=v] [--body '{}'] [--body-file file] [--timeout 60s]
 
-- plugins — manage engine plugins
+- images — manage engine images
   - list
   - show <name>
   - enable <name>

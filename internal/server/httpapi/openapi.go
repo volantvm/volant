@@ -79,7 +79,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 	mcpRespRef, _ := gen.NewSchemaRefForValue(&MCPResponse{}, spec.Components.Schemas)
 	// Phase 3 additions
 	sysSummaryRef, _ := gen.NewSchemaRefForValue(&systemSummaryResponse{}, spec.Components.Schemas)
-	pluginArtifactRef, _ := gen.NewSchemaRefForValue(&db.ImageArtifact{}, spec.Components.Schemas)
+	imageArtifactRef, _ := gen.NewSchemaRefForValue(&db.ImageArtifact{}, spec.Components.Schemas)
 	upsertArtifactReqRef, _ := gen.NewSchemaRefForValue(&upsertArtifactRequest{}, spec.Components.Schemas)
 	// Events
 	vmEventRef, _ := gen.NewSchemaRefForValue(&orchestratorevents.VMEvent{}, spec.Components.Schemas)
@@ -637,7 +637,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		op.Responses = openapi3.NewResponses()
 		{
 			resp := openapi3.NewResponse().WithDescription("Artifacts list")
-			arr := &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}, Items: pluginArtifactRef}
+			arr := &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeArray}, Items: imageArtifactRef}
 			resp.Content = openapi3.NewContentWithJSONSchema(arr)
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
 		}
@@ -685,7 +685,7 @@ func BuildOpenAPISpec(baseURL string) (*openapi3.T, error) {
 		op.Responses = openapi3.NewResponses()
 		{
 			resp := openapi3.NewResponse().WithDescription("Artifact")
-			resp.Content = openapi3.NewContentWithJSONSchemaRef(pluginArtifactRef)
+			resp.Content = openapi3.NewContentWithJSONSchemaRef(imageArtifactRef)
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: resp})
 		}
 		op.Responses.Set("404", &openapi3.ResponseRef{Value: openapi3.NewResponse().WithDescription("Not found").WithContent(openapi3.NewContentWithJSONSchemaRef(errorSchema))})

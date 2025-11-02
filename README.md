@@ -64,8 +64,8 @@ Volant provides:
 
 **Two paths, same workflow**:
 
-1. **[`Rootfs strategy`](https://github.com/volantvm/oci-plugin-example)** — Convert OCI images to bootable disk images (Docker compatibility)
-2. **[`Initramfs strategy`](https://github.com/volantvm/initramfs-plugin-example)** — Build custom appliances from scratch (maximum performance)
+1. **[`Rootfs strategy`](https://github.com/volantvm/oci-image-example)** — Convert OCI images to bootable disk images (Docker compatibility)
+2. **[`Initramfs strategy`](https://github.com/volantvm/initramfs-image-example)** — Build custom appliances from scratch (maximum performance)
 
 ---
 
@@ -98,18 +98,18 @@ curl -fsSL https://get.volantvm.com | bash -s -- --skip-setup
 
 ### 2. Install a pre-built image
 
-Let's start with a Caddy initramfs image [(initramfs-plugin-example)](https://github.com/volantvm/initramfs-plugin-example)
+Let's start with a Caddy initramfs image [(initramfs-image-example)](https://github.com/volantvm/initramfs-image-example)
 
 ```bash
 volar images install --manifest \
-  https://github.com/volantvm/initramfs-plugin-example/releases/latest/download/caddy.json
+  https://github.com/volantvm/initramfs-image-example/releases/latest/download/caddy.json
 ```
 
 ---
 
 ### 3. Create and run your first VM
 ```bash
-volar vms create web --plugin caddy --cpu 2 --memory 512
+volar vms create web --image caddy --cpu 2 --memory 512
 ```
 
 Check it's alive:
@@ -120,14 +120,14 @@ curl 192.168.127.10
 
 ---
 
-### 4. Try a Docker-based workload [(oci-plugin-example)](https://github.com/volantvm/oci-plugin-example)
+### 4. Try a Docker-based workload [(oci-image-example)](https://github.com/volantvm/oci-image-example)
 
 This example runs **NGINX** directly from the official Docker image:
 ```bash
 volar images install --manifest \
-  https://github.com/volantvm/oci-plugin-example/releases/latest/download/nginx.json
+  https://github.com/volantvm/oci-image-example/releases/latest/download/nginx.json
 
-volar vms create my-nginx --plugin nginx --cpu 1 --memory 1024
+volar vms create my-nginx --image nginx --cpu 1 --memory 1024
 curl http://192.168.127.11
 ```
 
@@ -138,7 +138,7 @@ curl http://192.168.127.11
 ```bash
 cat > web-config.json <<'EOF'
 {
-  "plugin": "caddy",
+  "image": "caddy",
   "resources": {
     "cpu_cores": 2,
     "memory_mb": 512
@@ -164,8 +164,8 @@ volar deployments create web-cluster \
 Use **[fledge](https://github.com/volantvm/fledge)** to build custom images from OCI images or static binaries.
 
 **Examples**:
-- [initramfs-plugin-example](https://github.com/volantvm/initramfs-plugin-example) — Caddy web server (fast boot, minimal size)
-- [oci-plugin-example](https://github.com/volantvm/oci-plugin-example) — NGINX from Docker image (Docker compatibility)
+- [initramfs-image-example](https://github.com/volantvm/initramfs-image-example) — Caddy web server (fast boot, minimal size)
+- [oci-image-example](https://github.com/volantvm/oci-image-example) — NGINX from Docker image (Docker compatibility)
 
 
 ---
@@ -224,7 +224,7 @@ Use **[fledge](https://github.com/volantvm/fledge)** to build custom images from
 - IP allowlist: `VOLANT_API_ALLOW_CIDR="127.0.0.1/32,192.168.0.0/16"`
 - API key: `VOLANT_API_KEY=...` then send header `X-Volant-API-Key: <key>`
 - System summary: `GET /api/v1/system/summary`
-- VM list with filters/pagination: `GET /api/v1/vms?status=running&runtime=browser&plugin=caddy&q=web&limit=20&offset=0&sort=created_at&order=desc` (returns `X-Total-Count`)
+- VM list with filters/pagination: `GET /api/v1/vms?status=running&runtime=browser&image=caddy&q=web&limit=20&offset=0&sort=created_at&order=desc` (returns `X-Total-Count`)
 - Console WebSocket: `GET ws://<host>/ws/v1/vms/:name/console` (raw serial bridge)
 - Image artifacts API:
   - List: `GET /api/v1/images/:image/artifacts?version=v1`

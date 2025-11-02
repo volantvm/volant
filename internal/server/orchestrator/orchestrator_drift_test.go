@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	driftroutes "github.com/volantvm/volant/internal/drift/routes"
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/db"
 	"github.com/volantvm/volant/internal/server/orchestrator/vmconfig"
 )
@@ -39,7 +39,7 @@ func TestComputeDriftRoutes_DefaultBridged(t *testing.T) {
 func TestComputeDriftRoutes_VsockRequiresTCP(t *testing.T) {
 	eng := &engine{}
 	vm := db.VM{Name: "vm-2", VsockCID: 33}
-	mode := string(pluginspec.NetworkModeVsock)
+	mode := string(imagespec.NetworkModeVsock)
 	exposes := []vmconfig.Expose{{HostPort: 9000, Port: 9000, Mode: mode, Protocol: "udp"}}
 
 	if _, err := eng.computeDriftRoutes(vm, nil, exposes); err == nil {
@@ -50,7 +50,7 @@ func TestComputeDriftRoutes_VsockRequiresTCP(t *testing.T) {
 func TestComputeDriftRoutes_DeduplicatesHostPorts(t *testing.T) {
 	eng := &engine{}
 	vm := db.VM{Name: "vm-3", IPAddress: "10.0.0.10"}
-	netCfg := &pluginspec.NetworkConfig{Mode: pluginspec.NetworkModeBridged}
+	netCfg := &imagespec.NetworkConfig{Mode: imagespec.NetworkModeBridged}
 	exposes := []vmconfig.Expose{
 		{HostPort: 8080, Port: 80, Protocol: "tcp"},
 		{HostPort: 8080, Port: 80, Protocol: "TCP"},

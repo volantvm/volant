@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/orchestrator/runtime"
 )
 
@@ -109,7 +109,7 @@ func (l *Launcher) Launch(ctx context.Context, spec runtime.LaunchSpec) (runtime
 
 		rootfsType := strings.ToLower(strings.TrimSpace(spec.Args["rootfstype"]))
 		if rootfsType == "" {
-			if v, ok := spec.Args[pluginspec.RootFSFSTypeKey]; ok {
+			if v, ok := spec.Args[imagespec.RootFSFSTypeKey]; ok {
 				rootfsType = strings.ToLower(strings.TrimSpace(v))
 			}
 		}

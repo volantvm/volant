@@ -21,7 +21,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	orchestratorevents "github.com/volantvm/volant/internal/server/orchestrator/events"
 	"github.com/volantvm/volant/internal/server/orchestrator/vmconfig"
 	"github.com/volantvm/volant/internal/vsock"
@@ -69,14 +69,14 @@ type VM struct {
 
 // CreateVMRequest contains creation parameters.
 type CreateVMRequest struct {
-	Name          string                `json:"name"`
-	Plugin        string                `json:"plugin"`
-	Runtime       string                `json:"runtime,omitempty"`
-	KernelCmdline string                `json:"kernel_cmdline,omitempty"`
-	APIHost       string                `json:"api_host,omitempty"`
-	APIPort       string                `json:"api_port,omitempty"`
-	Config        *vmconfig.Config      `json:"config,omitempty"`
-	Overrides     vmconfig.Overrides    `json:"overrides,omitempty"`
+	Name          string             `json:"name"`
+	Image         string             `json:"image"`
+	Runtime       string             `json:"runtime,omitempty"`
+	KernelCmdline string             `json:"kernel_cmdline,omitempty"`
+	APIHost       string             `json:"api_host,omitempty"`
+	APIPort       string             `json:"api_port,omitempty"`
+	Config        *vmconfig.Config   `json:"config,omitempty"`
+	Overrides     vmconfig.Overrides `json:"overrides,omitempty"`
 }
 
 // Deployment represents a VM deployment group.
@@ -140,7 +140,7 @@ type MCPResponse struct {
 	Error  string      `json:"error"`
 }
 
-type Image = pluginspec.Manifest
+type Image = imagespec.Manifest
 
 func (c *Client) ListVMs(ctx context.Context) ([]VM, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/vms", nil)
@@ -166,7 +166,7 @@ func (c *Client) GetVM(ctx context.Context, name string) (*VM, error) {
 	return &vm, nil
 }
 
-// GetVMOpenAPI fetches the raw OpenAPI specification document for the VM's plugin.
+// GetVMOpenAPI fetches the raw OpenAPI specification document for the VM's image.
 // Returns the document bytes and content type (application/json or application/yaml).
 func (c *Client) GetVMOpenAPI(ctx context.Context, name string) ([]byte, string, error) {
 	path := "/api/v1/vms/" + url.PathEscape(name) + "/openapi"
@@ -733,7 +733,7 @@ func (c *Client) GetSystemStatus(ctx context.Context) (*SystemStatus, error) {
 	return &status, nil
 }
 
-func (c *Client) ListImages(ctx context.Context) ([]pluginspec.Manifest, error) {
+func (c *Client) ListImages(ctx context.Context) ([]imagespec.Manifest, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/images", nil)
 	if err != nil {
 		return nil, err
@@ -744,7 +744,7 @@ func (c *Client) ListImages(ctx context.Context) ([]pluginspec.Manifest, error) 
 	if err := c.do(req, &response); err != nil {
 		return nil, err
 	}
-	result := make([]pluginspec.Manifest, 0, len(response.Images))
+	result := make([]imagespec.Manifest, 0, len(response.Images))
 	for _, name := range response.Images {
 		image, err := c.GetImage(ctx, name)
 		if err != nil {
@@ -757,23 +757,23 @@ func (c *Client) ListImages(ctx context.Context) ([]pluginspec.Manifest, error) 
 	return result, nil
 }
 
-func (c *Client) GetImage(ctx context.Context, name string) (*pluginspec.Manifest, error) {
+func (c *Client) GetImage(ctx context.Context, name string) (*imagespec.Manifest, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, "/api/v1/images/"+url.PathEscape(name), nil)
 	if err != nil {
 		return nil, err
 	}
-	var manifest pluginspec.Manifest
+	var manifest imagespec.Manifest
 	if err := c.do(req, &manifest); err != nil {
 		return nil, err
 	}
 	return &manifest, nil
 }
 
-func (c *Client) DescribeImage(ctx context.Context, name string) (*pluginspec.Manifest, error) {
+func (c *Client) DescribeImage(ctx context.Context, name string) (*imagespec.Manifest, error) {
 	return c.GetImage(ctx, name)
 }
 
-func (c *Client) InstallImage(ctx context.Context, manifest pluginspec.Manifest) error {
+func (c *Client) InstallImage(ctx context.Context, manifest imagespec.Manifest) error {
 	req, err := c.newRequest(ctx, http.MethodPost, "/api/v1/images", manifest)
 	if err != nil {
 		return err

@@ -8,16 +8,16 @@ package orchestrator
 import (
 	"testing"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/orchestrator/vmconfig"
 )
 
 func TestResolveNetworkConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		manifest *pluginspec.Manifest
+		manifest *imagespec.Manifest
 		vmConfig *vmconfig.Config
-		want     *pluginspec.NetworkConfig
+		want     *imagespec.NetworkConfig
 	}{
 		{
 			name:     "both nil returns nil",
@@ -27,56 +27,56 @@ func TestResolveNetworkConfig(t *testing.T) {
 		},
 		{
 			name: "manifest only",
-			manifest: &pluginspec.Manifest{
-				Network: &pluginspec.NetworkConfig{
-					Mode: pluginspec.NetworkModeVsock,
+			manifest: &imagespec.Manifest{
+				Network: &imagespec.NetworkConfig{
+					Mode: imagespec.NetworkModeVsock,
 				},
 			},
 			vmConfig: nil,
-			want: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeVsock,
+			want: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeVsock,
 			},
 		},
 		{
 			name:     "vm config only",
 			manifest: nil,
 			vmConfig: &vmconfig.Config{
-				Network: &pluginspec.NetworkConfig{
-					Mode: pluginspec.NetworkModeBridged,
+				Network: &imagespec.NetworkConfig{
+					Mode: imagespec.NetworkModeBridged,
 				},
 			},
-			want: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeBridged,
+			want: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeBridged,
 			},
 		},
 		{
 			name: "vm config overrides manifest",
-			manifest: &pluginspec.Manifest{
-				Network: &pluginspec.NetworkConfig{
-					Mode: pluginspec.NetworkModeVsock,
+			manifest: &imagespec.Manifest{
+				Network: &imagespec.NetworkConfig{
+					Mode: imagespec.NetworkModeVsock,
 				},
 			},
 			vmConfig: &vmconfig.Config{
-				Network: &pluginspec.NetworkConfig{
-					Mode: pluginspec.NetworkModeDHCP,
+				Network: &imagespec.NetworkConfig{
+					Mode: imagespec.NetworkModeDHCP,
 				},
 			},
-			want: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeDHCP,
+			want: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeDHCP,
 			},
 		},
 		{
 			name: "vm config without network falls back to manifest",
-			manifest: &pluginspec.Manifest{
-				Network: &pluginspec.NetworkConfig{
-					Mode: pluginspec.NetworkModeVsock,
+			manifest: &imagespec.Manifest{
+				Network: &imagespec.NetworkConfig{
+					Mode: imagespec.NetworkModeVsock,
 				},
 			},
 			vmConfig: &vmconfig.Config{
-				Plugin: "test",
+				Image: "test",
 			},
-			want: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeVsock,
+			want: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeVsock,
 			},
 		},
 	}
@@ -102,7 +102,7 @@ func TestResolveNetworkConfig(t *testing.T) {
 func TestNeedsIPAllocation(t *testing.T) {
 	tests := []struct {
 		name   string
-		netCfg *pluginspec.NetworkConfig
+		netCfg *imagespec.NetworkConfig
 		want   bool
 	}{
 		{
@@ -112,35 +112,35 @@ func TestNeedsIPAllocation(t *testing.T) {
 		},
 		{
 			name: "vsock mode does not need IP",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeVsock,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeVsock,
 			},
 			want: false,
 		},
 		{
 			name: "bridged mode needs IP",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeBridged,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeBridged,
 			},
 			want: true,
 		},
 		{
 			name: "dhcp mode does not need host-managed IP",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeDHCP,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeDHCP,
 			},
 			want: false,
 		},
 		{
 			name: "empty mode defaults to needing IP",
-			netCfg: &pluginspec.NetworkConfig{
+			netCfg: &imagespec.NetworkConfig{
 				Mode: "",
 			},
 			want: true,
 		},
 		{
 			name: "uppercase vsock mode",
-			netCfg: &pluginspec.NetworkConfig{
+			netCfg: &imagespec.NetworkConfig{
 				Mode: "VSOCK",
 			},
 			want: false,
@@ -159,7 +159,7 @@ func TestNeedsIPAllocation(t *testing.T) {
 func TestNeedsTapDevice(t *testing.T) {
 	tests := []struct {
 		name   string
-		netCfg *pluginspec.NetworkConfig
+		netCfg *imagespec.NetworkConfig
 		want   bool
 	}{
 		{
@@ -169,35 +169,35 @@ func TestNeedsTapDevice(t *testing.T) {
 		},
 		{
 			name: "vsock mode does not need tap",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeVsock,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeVsock,
 			},
 			want: false,
 		},
 		{
 			name: "bridged mode needs tap",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeBridged,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeBridged,
 			},
 			want: true,
 		},
 		{
 			name: "dhcp mode needs tap",
-			netCfg: &pluginspec.NetworkConfig{
-				Mode: pluginspec.NetworkModeDHCP,
+			netCfg: &imagespec.NetworkConfig{
+				Mode: imagespec.NetworkModeDHCP,
 			},
 			want: true,
 		},
 		{
 			name: "empty mode defaults to needing tap",
-			netCfg: &pluginspec.NetworkConfig{
+			netCfg: &imagespec.NetworkConfig{
 				Mode: "",
 			},
 			want: true,
 		},
 		{
 			name: "uppercase vsock mode",
-			netCfg: &pluginspec.NetworkConfig{
+			netCfg: &imagespec.NetworkConfig{
 				Mode: "VSOCK",
 			},
 			want: false,

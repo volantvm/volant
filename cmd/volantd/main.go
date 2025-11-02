@@ -29,7 +29,7 @@ import (
 	"github.com/volantvm/volant/internal/server/orchestrator"
 	"github.com/volantvm/volant/internal/server/orchestrator/cloudhypervisor"
 	"github.com/volantvm/volant/internal/server/orchestrator/network"
-	"github.com/volantvm/volant/internal/server/plugins"
+	"github.com/volantvm/volant/internal/server/images"
 	"github.com/volantvm/volant/internal/shared/logging"
 )
 
@@ -69,7 +69,7 @@ func main() {
 		logDir,
 	)
 
-	runtimeRegistry := plugins.NewRegistry(store.Queries().Images())
+	runtimeRegistry := images.NewRegistry(store.Queries().Images())
 
 	var netManager network.Manager
 	if runtime.GOOS == "linux" {

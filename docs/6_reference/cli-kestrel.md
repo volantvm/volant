@@ -12,8 +12,8 @@ Key behavior (see fledge/internal/builder/embed/init.c and agent code):
 - It can proxy HTTP requests from volantd to workloads running in the guest, enabling fully isolated vsock-only deployments.
 
 The agent receives runtime arguments via the kernel cmdline, encoded by the orchestrator, including:
-- runtime (pluginspec.RuntimeKey)
-- api host/port (pluginspec.APIHostKey/APIPortKey)
-- encoded manifest (pluginspec.CmdlineKey)
+- runtime (imagespec.RuntimeKey)
+- api host/port (imagespec.APIHostKey/APIPortKey)
+- encoded manifest (imagespec.CmdlineKey)
 
 For most users, there are no CLI flags to pass directly to kestrel; configuration is provided through the manifest and per-VM config.

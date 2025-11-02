@@ -11,9 +11,9 @@ Run unmodified Docker/OCI images as microVMs with hardware isolation. This path 
 
 ```bash
 volar images install --manifest \
-  https://raw.githubusercontent.com/volantvm/oci-plugin-example/main/manifest/nginx.json
+  https://raw.githubusercontent.com/volantvm/oci-image-example/main/manifest/nginx.json
 
-volar vms create web --plugin nginx --cpu 2 --memory 1024
+volar vms create web --image nginx --cpu 2 --memory 1024
 ```
 
 Result: a microVM that boots in seconds with an OCI-based root filesystem and full hardware isolation.
@@ -129,10 +129,10 @@ This will:
 volar images install dist/manifest.json
 
 # Create a VM with defaults from manifest.toml
-volar vms create demo --plugin nginx
+volar vms create demo --image nginx
 
 # Or create a VM with overrides
-volar vms create prod --plugin nginx \
+volar vms create prod --image nginx \
   --cpu 4 \
   --memory 2048 \
   --env LOG_LEVEL=warn \
@@ -167,7 +167,7 @@ Then install and run:
 
 ```bash
 volar images install my-rootfs.manifest.json
-volar vms create demo --plugin my-rootfs
+volar vms create demo --image my-rootfs
 ```
 
 ## Configuration Override Examples
@@ -176,21 +176,21 @@ The three-tier configuration system lets you customize VMs without rebuilding im
 
 ```bash
 # Development: minimal resources, debug logging
-volar vms create dev --plugin nginx \
+volar vms create dev --image nginx \
   --cpu 1 \
   --memory 512 \
   --env LOG_LEVEL=debug \
   --env NGINX_PORT=8080
 
 # Production: more resources, different ports
-volar vms create prod --plugin nginx \
+volar vms create prod --image nginx \
   --cpu 8 \
   --memory 8192 \
   --env LOG_LEVEL=error \
   --port 443:80
 
 # Staging: custom environment variables
-volar vms create staging --plugin nginx \
+volar vms create staging --image nginx \
   --env UPSTREAM_HOST=staging-backend.internal \
   --env CACHE_ENABLED=true
 ```

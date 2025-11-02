@@ -12,7 +12,7 @@ This page traces the request paths and artifacts through the system.
 1) API/CLI → HTTP API
    - Endpoint: POST /api/v1/vms
    - Code: internal/server/httpapi/httpapi.go:createVM
-   - Resolves plugin manifest from registry; merges request + config overrides.
+   - Resolves image manifest from registry; merges request + config overrides.
 
 2) Orchestrator.CreateVM
    - Code: internal/server/orchestrator/orchestrator.go:CreateVM

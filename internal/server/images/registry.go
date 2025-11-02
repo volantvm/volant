@@ -3,7 +3,7 @@
 // Business Source License 1.1
 // See LICENSE file in the project root for details.
 
-package plugins
+package images
 
 import (
 	"context"
@@ -12,29 +12,29 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/db"
 )
 
-// Registry manages plugin manifests at runtime.
+// Registry manages image manifests at runtime.
 type Registry struct {
 	mu        sync.RWMutex
 	backend   db.ImageRepository
-	manifests map[string]pluginspec.Manifest
+	manifests map[string]imagespec.Manifest
 }
 
 func NewRegistry(repo db.ImageRepository) *Registry {
-	return &Registry{backend: repo, manifests: make(map[string]pluginspec.Manifest)}
+	return &Registry{backend: repo, manifests: make(map[string]imagespec.Manifest)}
 }
 
-func (r *Registry) Register(manifest pluginspec.Manifest) {
+func (r *Registry) Register(manifest imagespec.Manifest) {
 	manifest.Normalize()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.manifests[manifest.Name] = manifest
 }
 
-func (r *Registry) Get(name string) (pluginspec.Manifest, bool) {
+func (r *Registry) Get(name string) (imagespec.Manifest, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	manifest, ok := r.manifests[name]
@@ -51,43 +51,43 @@ func (r *Registry) List() []string {
 	return names
 }
 
-func (r *Registry) ResolveAction(plugin, action string) (pluginspec.Manifest, pluginspec.Action, error) {
-	manifest, ok := r.Get(plugin)
+func (r *Registry) ResolveAction(image, action string) (imagespec.Manifest, imagespec.Action, error) {
+	manifest, ok := r.Get(image)
 	if !ok {
-		return pluginspec.Manifest{}, pluginspec.Action{}, fmt.Errorf("plugin %s not found", plugin)
+		return imagespec.Manifest{}, imagespec.Action{}, fmt.Errorf("image %s not found", image)
 	}
 	actionSpec, ok := manifest.Actions[action]
 	if !ok {
-		return pluginspec.Manifest{}, pluginspec.Action{}, fmt.Errorf("action %s not found", action)
+		return imagespec.Manifest{}, imagespec.Action{}, fmt.Errorf("action %s not found", action)
 	}
 	return manifest, actionSpec, nil
 }
 
-func (r *Registry) Fetch(ctx context.Context, name string) (pluginspec.Manifest, error) {
+func (r *Registry) Fetch(ctx context.Context, name string) (imagespec.Manifest, error) {
 	if r.backend == nil {
-		return pluginspec.Manifest{}, errors.New("registry backend not configured")
+		return imagespec.Manifest{}, errors.New("registry backend not configured")
 	}
-	plugin, err := r.backend.GetByName(ctx, name)
+	image, err := r.backend.GetByName(ctx, name)
 	if err != nil {
-		return pluginspec.Manifest{}, err
+		return imagespec.Manifest{}, err
 	}
-	if plugin == nil {
-		return pluginspec.Manifest{}, fmt.Errorf("plugin %s not found", name)
+	if image == nil {
+		return imagespec.Manifest{}, fmt.Errorf("image %s not found", name)
 	}
-	var manifest pluginspec.Manifest
-	if len(plugin.Metadata) > 0 {
-		if err := json.Unmarshal(plugin.Metadata, &manifest); err != nil {
-			return pluginspec.Manifest{}, err
+	var manifest imagespec.Manifest
+	if len(image.Metadata) > 0 {
+		if err := json.Unmarshal(image.Metadata, &manifest); err != nil {
+			return imagespec.Manifest{}, err
 		}
 	}
-	manifest.Name = plugin.Name
-	manifest.Version = plugin.Version
-	manifest.Enabled = plugin.Enabled
+	manifest.Name = image.Name
+	manifest.Version = image.Version
+	manifest.Enabled = image.Enabled
 	manifest.Normalize()
 	return manifest, nil
 }
 
-func (r *Registry) Persist(ctx context.Context, manifest pluginspec.Manifest, enabled bool) error {
+func (r *Registry) Persist(ctx context.Context, manifest imagespec.Manifest, enabled bool) error {
 	if r.backend == nil {
 		return errors.New("registry backend not configured")
 	}

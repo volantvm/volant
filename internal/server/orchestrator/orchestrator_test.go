@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/db/sqlite"
 	"github.com/volantvm/volant/internal/server/orchestrator/network"
 	"github.com/volantvm/volant/internal/server/orchestrator/runtime"
@@ -53,11 +53,11 @@ func TestEngineCreateAndDestroyVM(t *testing.T) {
 
 	vm, err := engine.CreateVM(ctx, CreateVMRequest{
 		Name:     "vm-test-1",
-		Plugin:   "browser",
+		Image:    "browser",
 		Runtime:  "browser",
 		CPUCores: 2,
 		MemoryMB: 2048,
-		Manifest: &pluginspec.Manifest{Name: "browser", Runtime: "browser"},
+		Manifest: &imagespec.Manifest{Name: "browser", Runtime: "browser"},
 	})
 	if err != nil {
 		t.Fatalf("create vm: %v", err)
@@ -135,13 +135,13 @@ func TestDeploymentScaling(t *testing.T) {
 	}
 
 	config := vmconfig.Config{
-		Plugin:  "browser",
+		Image:   "browser",
 		Runtime: "browser",
 		Resources: vmconfig.Resources{
 			CPUCores: 1,
 			MemoryMB: 512,
 		},
-		Manifest: &pluginspec.Manifest{Name: "browser", Runtime: "browser"},
+		Manifest: &imagespec.Manifest{Name: "browser", Runtime: "browser"},
 	}
 
 	deployment, err := engine.CreateDeployment(ctx, CreateDeploymentRequest{

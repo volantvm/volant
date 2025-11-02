@@ -38,7 +38,7 @@ Both bzImage and vmlinux contain the same embedded initramfs with kestrel agent 
 ## Kernel Command Line
 
 - Base args set by orchestrator (ip=... if managed, console, panic, etc.)
-- Additional runtime args from pluginspec constants (runtime, api_host, api_port, plugin, encoded manifest)
+- Additional runtime args from imagespec constants (runtime, api_host, api_port, image, encoded manifest)
 - Code: orchestrator.go buildKernelCmdline/appendKernelArgs, launcher assembles --cmdline
 
 ## Process Model

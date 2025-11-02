@@ -7,7 +7,7 @@ date: "2025-11-01"
 
 This section is the canonical guide for building Volant images using Fledge. It explains when to choose initramfs vs. OCI Rootfs, how the configuration split works, and how fledge builds images that can be installed and instantiated as VMs.
 
-## Terminology: Images, Not Plugins
+## Terminology: Images, Not Images
 
 Volant uses **images** as templates for creating VMs. An image defines:
 - Boot media (initramfs or rootfs)
@@ -21,7 +21,7 @@ Think of images like Docker images or AWS AMIs - reusable templates that can be 
 
 - Fledge config: fledge/internal/config/schema.go, config.go
 - Fledge builders: fledge/internal/builder/*.go
-- Volant manifest: volant/internal/pluginspec/spec.go
+- Volant manifest: volant/internal/imagespec/spec.go
 
 ## Choosing a Boot Strategy
 
@@ -81,14 +81,14 @@ Project Directory:
 
 dist/:
 ├── manifest.json    (generated: merged result)
-└── plugin.cpio.gz   (or rootfs.img)
+└── image.cpio.gz   (or rootfs.img)
 
 ↓ volar images install dist/manifest.json ↓
 
 Image Registry:
 - Image stored with manifest.json
 
-↓ volar vms create myvm --plugin myimage ↓
+↓ volar vms create myvm --image myimage ↓
 
 Running VM:
 - Uses manifest defaults
@@ -170,7 +170,7 @@ sudo fledge build
 
 This reads both files and generates:
 - `dist/manifest.json` (merged configuration)
-- `dist/plugin.cpio.gz` or `dist/rootfs.img` (boot media)
+- `dist/image.cpio.gz` or `dist/rootfs.img` (boot media)
 
 ### 5. Install and Run
 
@@ -179,10 +179,10 @@ This reads both files and generates:
 volar images install dist/manifest.json
 
 # Create VM with defaults
-volar vms create demo --plugin myapp
+volar vms create demo --image myapp
 
 # Or create with overrides
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 4 \
   --memory 2048 \
   --env LOG_LEVEL=debug
@@ -287,7 +287,7 @@ LOG_LEVEL = "info"
 
 **VM creation:**
 ```bash
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 4 \
   --env LOG_LEVEL=debug \
   --env DATABASE_URL=prod.db.internal
@@ -311,13 +311,13 @@ sudo fledge build
 volar images install dist/manifest.json
 
 # Development: minimal resources
-volar vms create dev --plugin myapp \
+volar vms create dev --image myapp \
   --cpu 1 \
   --memory 512 \
   --env LOG_LEVEL=trace
 
 # Production: more resources
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 8 \
   --memory 8192 \
   --env LOG_LEVEL=error
@@ -328,7 +328,7 @@ volar vms create prod --plugin myapp \
 ```bash
 # Create multiple VMs with different ports
 for i in {1..5}; do
-  volar vms create web-$i --plugin myapp --port $((8080+i)):8080
+  volar vms create web-$i --image myapp --port $((8080+i)):8080
 done
 ```
 
@@ -340,8 +340,8 @@ sudo fledge build  # myapp:2.0.0
 volar images install dist/manifest.json
 
 # Create new instances
-volar vms create app-v2-1 --plugin myapp:2.0.0
-volar vms create app-v2-2 --plugin myapp:2.0.0
+volar vms create app-v2-1 --image myapp:2.0.0
+volar vms create app-v2-2 --image myapp:2.0.0
 
 # Test, then remove old instances
 volar vms delete app-v1-1 app-v1-2

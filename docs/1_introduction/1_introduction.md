@@ -87,8 +87,8 @@ The workflow:
 1. Build: `fledge build` reads both fledge.toml and manifest.toml
 2. Output: Generates manifest.json (merged result) and boot media
 3. Install: `volar images install dist/manifest.json`
-4. Create VMs: `volar vms create app --plugin myimage` (uses defaults)
-5. Or override: `volar vms create prod --plugin myimage --cpu 4 --memory 4096`
+4. Create VMs: `volar vms create app --image myimage` (uses defaults)
+5. Or override: `volar vms create prod --image myimage --cpu 4 --memory 4096`
 
 ## Two Paths to MicroVM Execution
 
@@ -172,7 +172,7 @@ The workflow:
 1. Author: Create fledge.toml (build config) and manifest.toml (runtime defaults)
 2. Build: Run `fledge build` to generate manifest.json and boot media
 3. Install: `volar images install dist/manifest.json` adds image to registry
-4. Create VMs: `volar vms create name --plugin imagename` with optional overrides
+4. Create VMs: `volar vms create name --image imagename` with optional overrides
 
 ## Real-World Use Cases
 

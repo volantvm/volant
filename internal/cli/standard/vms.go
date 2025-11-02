@@ -24,7 +24,7 @@ import (
 
 	"github.com/volantvm/volant/internal/cli/client"
 	"github.com/volantvm/volant/internal/cli/openapiutil"
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/orchestrator/vmconfig"
 	"golang.org/x/term"
 )
@@ -214,8 +214,8 @@ func newVMsCreateCmd() *cobra.Command {
 			}
 
 			imageName := strings.TrimSpace(imageFlag)
-			if cfg != nil && strings.TrimSpace(cfg.Plugin) != "" {
-				cfgImage := strings.TrimSpace(cfg.Plugin)
+			if cfg != nil && strings.TrimSpace(cfg.Image) != "" {
+				cfgImage := strings.TrimSpace(cfg.Image)
 				if imageName != "" && !strings.EqualFold(imageName, cfgImage) {
 					return fmt.Errorf("image mismatch between flag (%s) and config (%s)", imageName, cfgImage)
 				}
@@ -343,7 +343,7 @@ func newVMsCreateCmd() *cobra.Command {
 
 			req := client.CreateVMRequest{
 				Name:          args[0],
-				Plugin:        imageName,
+				Image:         imageName,
 				Runtime:       runtimeName,
 				KernelCmdline: kernelExtra,
 				APIHost:       apiHost,
@@ -352,7 +352,7 @@ func newVMsCreateCmd() *cobra.Command {
 			}
 			if cfg != nil {
 				cfgClone := cfg.Clone()
-				cfgClone.Plugin = imageName
+				cfgClone.Image = imageName
 				cfgClone.Runtime = runtimeName
 				cfgClone.KernelCmdline = kernelExtra
 				cfgClone.API = vmconfig.API{Host: apiHost, Port: apiPort}
@@ -360,7 +360,7 @@ func newVMsCreateCmd() *cobra.Command {
 				// Merge device flags with config
 				if len(deviceFlag) > 0 || len(deviceAllowlistFlag) > 0 {
 					if cfgClone.Manifest != nil && cfgClone.Manifest.Devices == nil {
-						cfgClone.Manifest.Devices = &pluginspec.DeviceConfig{}
+						cfgClone.Manifest.Devices = &imagespec.DeviceConfig{}
 					}
 					if len(deviceFlag) > 0 {
 						cfgClone.Manifest.Devices.PCIPassthrough = deviceFlag
@@ -375,7 +375,7 @@ func newVMsCreateCmd() *cobra.Command {
 					cfgClone.KernelOverride = strings.TrimSpace(kernelPathFlag)
 				}
 				if strings.TrimSpace(initramfsFlag) != "" {
-					cfgClone.Initramfs = &pluginspec.Initramfs{
+					cfgClone.Initramfs = &imagespec.Initramfs{
 						URL:      strings.TrimSpace(initramfsFlag),
 						Checksum: strings.TrimSpace(initramfsChecksumFlag),
 					}
@@ -390,7 +390,7 @@ func newVMsCreateCmd() *cobra.Command {
 
 				if needConfig {
 					cfgClone := vmconfig.Config{
-						Plugin:        imageName,
+						Image:         imageName,
 						Runtime:       runtimeName,
 						KernelCmdline: kernelExtra,
 						API:           vmconfig.API{Host: apiHost, Port: apiPort},
@@ -404,7 +404,7 @@ func newVMsCreateCmd() *cobra.Command {
 					if len(deviceFlag) > 0 || len(deviceAllowlistFlag) > 0 {
 						if cfgClone.Manifest != nil {
 							if cfgClone.Manifest.Devices == nil {
-								cfgClone.Manifest.Devices = &pluginspec.DeviceConfig{}
+								cfgClone.Manifest.Devices = &imagespec.DeviceConfig{}
 							}
 							if len(deviceFlag) > 0 {
 								cfgClone.Manifest.Devices.PCIPassthrough = deviceFlag
@@ -418,7 +418,7 @@ func newVMsCreateCmd() *cobra.Command {
 						cfgClone.KernelOverride = strings.TrimSpace(kernelPathFlag)
 					}
 					if strings.TrimSpace(initramfsFlag) != "" {
-						cfgClone.Initramfs = &pluginspec.Initramfs{
+						cfgClone.Initramfs = &imagespec.Initramfs{
 							URL:      strings.TrimSpace(initramfsFlag),
 							Checksum: strings.TrimSpace(initramfsChecksumFlag),
 						}
@@ -1075,11 +1075,11 @@ func clientFromCmd(cmd *cobra.Command) (*client.Client, error) {
 	return client.New(base)
 }
 
-// newVMsOperationsCmd lists all available operations from the VM's plugin OpenAPI spec.
+// newVMsOperationsCmd lists all available operations from the VM's image OpenAPI spec.
 func newVMsOperationsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "operations <vm>",
-		Short: "List available plugin operations for a VM",
+		Short: "List available image operations for a VM",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			api, err := clientFromCmd(cmd)
@@ -1131,7 +1131,7 @@ func newVMsOperationsCmd() *cobra.Command {
 	return cmd
 }
 
-// newVMsCallCmd dynamically invokes an operation from the VM's plugin OpenAPI spec.
+// newVMsCallCmd dynamically invokes an operation from the VM's image OpenAPI spec.
 func newVMsCallCmd() *cobra.Command {
 	var queryParams []string
 	var bodyFile string
@@ -1140,8 +1140,8 @@ func newVMsCallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "call <vm> <operation-id>",
-		Short: "Invoke a plugin operation dynamically",
-		Long: `Invoke a plugin operation by operationId or METHOD:PATH.
+		Short: "Invoke a image operation dynamically",
+		Long: `Invoke a image operation by operationId or METHOD:PATH.
 
 Examples:
   volar vms call myvm getStatus

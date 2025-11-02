@@ -15,7 +15,7 @@ This section drills into each major subsystem with references to concrete code.
   - Security: optional X-Volant-API-Key and VOLANT_API_ALLOW_CIDR middleware
   - Responsibilities:
     - Validate and route requests to the orchestrator
-    - Plugin registry integration (install/remove/toggle, serve manifests)
+    - Image registry integration (install/remove/toggle, serve manifests)
     - Reverse proxy to guest agent for actions/logs/OpenAPI
     - SSE stream for lifecycle events
 
@@ -24,7 +24,7 @@ This section drills into each major subsystem with references to concrete code.
   - Exposes /openapi with a generated spec; docs/6_reference/api/openapi.json is built via cmd/openapi-export
 
 - Images registry
-  - Files: internal/server/plugins/{registry.go, loader.go}
+  - Files: internal/server/images/{registry.go, loader.go}
   - Stores runtime manifests in memory, persists to DB via db.ImageRepository
   - Action resolution and basic action dispatch path
 
@@ -34,7 +34,7 @@ This section drills into each major subsystem with references to concrete code.
   - File: internal/server/orchestrator/orchestrator.go
   - Provides VM lifecycle (Create/Start/Stop/Restart/Destroy), deployments, config history, events
   - Merges:
-    - Image manifest defaults (internal/pluginspec/spec.go)
+    - Image manifest defaults (internal/imagespec/spec.go)
     - VM config overrides (internal/server/orchestrator/vmconfig)
 
 - Networking decision helpers

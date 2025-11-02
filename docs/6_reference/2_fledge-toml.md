@@ -35,7 +35,7 @@ Both files are read by `fledge build`, which merges them with build metadata to 
 
 ## Editor Integration
 
-For Taplo-compatible editors (VS Code/JetBrains TOML plugins), add this comment at the very top of your fledge.toml to enable autocomplete and validation:
+For Taplo-compatible editors (VS Code/JetBrains TOML images), add this comment at the very top of your fledge.toml to enable autocomplete and validation:
 
 ```
 # schema = "https://raw.githubusercontent.com/volantvm/volant/main/docs/schemas/fledge-toml-v1.json"

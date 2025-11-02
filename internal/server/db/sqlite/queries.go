@@ -464,7 +464,7 @@ func (r *imageArtifactRepository) Upsert(ctx context.Context, artifact db.ImageA
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(image_name, version, artifact_name) DO UPDATE SET kind = excluded.kind, source_url = excluded.source_url, checksum = excluded.checksum, format = excluded.format, local_path = excluded.local_path, size_bytes = excluded.size_bytes, updated_at = CURRENT_TIMESTAMP;`,
 		artifact.ImageName, artifact.Version, artifact.ArtifactName, artifact.Kind, artifact.SourceURL, artifact.Checksum, artifact.Format, artifact.LocalPath, artifact.SizeBytes); err != nil {
-		return fmt.Errorf("upsert plugin artifact: %w", err)
+		return fmt.Errorf("upsert image artifact: %w", err)
 	}
 	return nil
 }

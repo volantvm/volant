@@ -171,7 +171,7 @@ chmod +x fledge-linux-amd64 && sudo mv fledge-linux-amd64 /usr/local/bin/fledge
 
 # Build image
 sudo fledge build
-# → outputs dist/plugin.cpio.gz and dist/manifest.json
+# → outputs dist/image.cpio.gz and dist/manifest.json
 ```
 
 ## Install and Run
@@ -181,10 +181,10 @@ sudo fledge build
 volar images install dist/manifest.json
 
 # Create VM with defaults from manifest.toml
-volar vms create demo --plugin myapp
+volar vms create demo --image myapp
 
 # Or create with overrides
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 2 \
   --memory 1024 \
   --env LOG_LEVEL=debug \
@@ -268,21 +268,21 @@ The three-tier hierarchy allows customization without rebuilding:
 
 ```bash
 # Development: debug mode
-volar vms create dev --plugin myapp \
+volar vms create dev --image myapp \
   --cpu 1 \
   --memory 256 \
   --env LOG_LEVEL=trace \
   --env DEBUG=true
 
 # Production: optimized resources
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 4 \
   --memory 2048 \
   --env LOG_LEVEL=error \
   --env WORKERS=16
 
 # Staging: custom database
-volar vms create staging --plugin myapp \
+volar vms create staging --image myapp \
   --env DATABASE_URL=staging.db.internal \
   --env CACHE_ENABLED=false
 ```
@@ -379,11 +379,11 @@ sudo fledge build
 volar images install dist/manifest.json
 
 # Create multiple instances
-volar vms create web-1 --plugin web-server
-volar vms create web-2 --plugin web-server --port 8081:8080
+volar vms create web-1 --image web-server
+volar vms create web-2 --image web-server --port 8081:8080
 
 # Production instance with more resources
-volar vms create web-prod --plugin web-server \
+volar vms create web-prod --image web-server \
   --cpu 8 \
   --memory 4096 \
   --env WORKERS=16 \

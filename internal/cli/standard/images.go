@@ -18,7 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/volantvm/volant/internal/pluginspec"
+	"github.com/volantvm/volant/internal/imagespec"
 )
 
 func newImagesCmd() *cobra.Command {
@@ -162,7 +162,7 @@ func newImagesInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var manifest pluginspec.Manifest
+			var manifest imagespec.Manifest
 			if err := json.Unmarshal(data, &manifest); err != nil {
 				return fmt.Errorf("decode manifest: %w", err)
 			}
@@ -189,7 +189,7 @@ func newImagesInstallCmd() *cobra.Command {
 			}
 			if manifest.CloudInit != nil {
 				base := filepath.Dir(manifestPath)
-				process := func(doc pluginspec.CloudInitDoc) (pluginspec.CloudInitDoc, error) {
+				process := func(doc imagespec.CloudInitDoc) (imagespec.CloudInitDoc, error) {
 					path := strings.TrimSpace(doc.Path)
 					if path == "" {
 						return doc, nil

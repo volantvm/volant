@@ -11,7 +11,7 @@ Ground truth:
 - fledge/internal/config/schema.go (FilesystemConfig, SourceConfig)
 - fledge/internal/builder/oci_rootfs.go (build pipeline)
 - fledge/internal/builder/mapping.go (FHS-aware placement and permissions)
-- volant/internal/pluginspec/spec.go (manifest)
+- volant/internal/imagespec/spec.go (manifest)
 - volant/internal/server/orchestrator/orchestrator.go (boot media resolution)
 
 ## When to Use
@@ -103,10 +103,10 @@ sudo fledge build
 volar images install dist/manifest.json
 
 # Create VM with defaults
-volar vms create web --plugin nginx
+volar vms create web --image nginx
 
 # Or create with overrides
-volar vms create prod --plugin nginx \
+volar vms create prod --image nginx \
   --cpu 4 \
   --memory 2048 \
   --env NGINX_PORT=8080 \
@@ -294,20 +294,20 @@ The three-tier hierarchy allows customization without rebuilding:
 
 ```bash
 # Development: minimal resources
-volar vms create dev --plugin nginx \
+volar vms create dev --image nginx \
   --cpu 1 \
   --memory 512 \
   --env LOG_LEVEL=debug
 
 # Production: more resources, different ports
-volar vms create prod --plugin nginx \
+volar vms create prod --image nginx \
   --cpu 8 \
   --memory 8192 \
   --env LOG_LEVEL=error \
   --port 443:80
 
 # Staging: custom configuration
-volar vms create staging --plugin nginx \
+volar vms create staging --image nginx \
   --env UPSTREAM_HOST=staging-backend.internal \
   --env CACHE_ENABLED=true \
   --memory 2048
@@ -446,19 +446,19 @@ sudo fledge build
 volar images install dist/manifest.json
 
 # Development instance
-volar vms create api-dev --plugin node-api \
+volar vms create api-dev --image node-api \
   --cpu 1 \
   --memory 512 \
   --env NODE_ENV=development \
   --env LOG_LEVEL=trace
 
 # Production instances
-volar vms create api-prod-1 --plugin node-api \
+volar vms create api-prod-1 --image node-api \
   --cpu 4 \
   --memory 4096 \
   --env LOG_LEVEL=warn
 
-volar vms create api-prod-2 --plugin node-api \
+volar vms create api-prod-2 --image node-api \
   --cpu 4 \
   --memory 4096 \
   --env LOG_LEVEL=warn

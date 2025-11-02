@@ -16,7 +16,7 @@ import (
 	"github.com/volantvm/volant/internal/server/db"
 	"github.com/volantvm/volant/internal/server/eventbus"
 	"github.com/volantvm/volant/internal/server/orchestrator"
-	"github.com/volantvm/volant/internal/server/plugins"
+	"github.com/volantvm/volant/internal/server/images"
 )
 
 // App wires the config, persistence, orchestrator, and HTTP transport.
@@ -26,14 +26,14 @@ type App struct {
 	store           db.Store
 	engine          orchestrator.Engine
 	events          eventbus.Bus
-	runtimeRegistry *plugins.Registry
+	runtimeRegistry *images.Registry
 	httpServer      *http.Server
 	shutdownWait    time.Duration
 }
 
 // New constructs the daemon application. Dependencies that are not yet
 // implemented should be passed as nil until their concrete types land.
-func New(cfg config.ServerConfig, logger *slog.Logger, store db.Store, engine orchestrator.Engine, events eventbus.Bus, registry *plugins.Registry, mux http.Handler) (*App, error) {
+func New(cfg config.ServerConfig, logger *slog.Logger, store db.Store, engine orchestrator.Engine, events eventbus.Bus, registry *images.Registry, mux http.Handler) (*App, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger must not be nil")
 	}

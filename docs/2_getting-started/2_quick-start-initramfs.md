@@ -11,9 +11,9 @@ This path builds ultra-fast, minimal appliances using initramfs. Initramfs image
 
 ```bash
 volar images install --manifest \
-  https://raw.githubusercontent.com/volantvm/initramfs-plugin-example/main/manifest/caddy.json
+  https://raw.githubusercontent.com/volantvm/initramfs-image-example/main/manifest/caddy.json
 
-volar vms create web --plugin caddy --cpu 1 --memory 512
+volar vms create web --image caddy --cpu 1 --memory 512
 ```
 
 Result: a microVM that boots in ~100ms and serves HTTP on its assigned IP.
@@ -105,7 +105,7 @@ This will:
 2. Download and configure BusyBox
 3. Install the Kestrel agent
 4. Apply your file mappings
-5. Generate manifest.json and plugin.cpio.gz in the dist/ directory
+5. Generate manifest.json and image.cpio.gz in the dist/ directory
 
 ### Install and Run
 
@@ -114,10 +114,10 @@ This will:
 volar images install dist/manifest.json
 
 # Create a VM with defaults from manifest.toml
-volar vms create demo --plugin myapp
+volar vms create demo --image myapp
 
 # Or create a VM with overrides
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 2 \
   --memory 1024 \
   --env LOG_LEVEL=debug
@@ -202,21 +202,21 @@ The three-tier configuration system lets you customize VMs without rebuilding im
 
 ```bash
 # Development: verbose logging, minimal resources
-volar vms create dev --plugin myapp \
+volar vms create dev --image myapp \
   --cpu 1 \
   --memory 256 \
   --env LOG_LEVEL=trace \
   --env DEBUG=true
 
 # Production: more resources, custom port mapping
-volar vms create prod --plugin myapp \
+volar vms create prod --image myapp \
   --cpu 4 \
   --memory 2048 \
   --env LOG_LEVEL=warn \
   --port 443:8080
 
 # Staging: different environment config
-volar vms create staging --plugin myapp \
+volar vms create staging --image myapp \
   --env DATABASE_URL=staging.db.example.com \
   --env CACHE_URL=staging.cache.example.com
 ```
