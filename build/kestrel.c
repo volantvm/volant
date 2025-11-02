@@ -439,7 +439,6 @@ static int mount_rootfs_squashfs(const char *device, const cmdline_t *cmd) {
     // Mount points
     mkdir("/lower", 0755);
     mkdir("/upper", 0755);
-    mkdir("/work", 0755);
     mkdir("/newroot", 0755);
 
     // Mount squashfs as lower (read-only)
@@ -460,9 +459,14 @@ static int mount_rootfs_squashfs(const char *device, const cmdline_t *cmd) {
         return -1;
     }
 
+    // CRITICAL: Create upper and work directories INSIDE the tmpfs mount
+    // overlayfs requires workdir to be on same filesystem as upperdir
+    mkdir("/upper/upper", 0755);
+    mkdir("/upper/work", 0755);
+
     // Mount overlayfs
     char overlay_opts[512];
-    snprintf(overlay_opts, sizeof(overlay_opts), "lowerdir=/lower,upperdir=/upper,workdir=/work");
+    snprintf(overlay_opts, sizeof(overlay_opts), "lowerdir=/lower,upperdir=/upper/upper,workdir=/upper/work");
 
     if (mount("overlay", "/newroot", "overlay", 0, overlay_opts)) {
         LOG_BOOT("Failed to mount overlayfs: %s", strerror(errno));
