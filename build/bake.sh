@@ -68,7 +68,7 @@ echo "SOURCE_DATE_EPOCH=$SDE"
 # Static build with no build-id for reproducibility
 echo "Compiling unified kestrel (C implementation)..."
 gcc -static -s -Wl,--build-id=none -O2 -Wall -Wextra \
-  "$ROOT_DIR/kestrel.c" -o "$ROOT_DIR/kestrel" || {
+  "$ROOT_DIR/kestrel.c" -o "$ROOT_DIR/kestrel" -lz || {
     echo "ERROR: kestrel.c compilation failed"
     exit 1
   }

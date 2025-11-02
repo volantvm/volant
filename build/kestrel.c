@@ -32,6 +32,7 @@
 #endif
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <zlib.h>
 
 // ============================================================================
 // CONFIGURATION & CONSTANTS
@@ -728,18 +729,61 @@ static manifest_t* fetch_manifest_from_api(const cmdline_t *cmd) {
     return parse_manifest_simple(body);
 }
 
+static unsigned char* gzip_decompress(unsigned char *compressed, size_t compressed_len, size_t *decompressed_len) {
+    *decompressed_len = 0;
+
+    // Allocate buffer for decompressed data (assume max 64KB for manifest)
+    size_t buf_size = 65536;
+    unsigned char *buffer = malloc(buf_size);
+    if (!buffer) return NULL;
+
+    z_stream stream = {0};
+    stream.next_in = compressed;
+    stream.avail_in = compressed_len;
+    stream.next_out = buffer;
+    stream.avail_out = buf_size;
+
+    // Use inflateInit2 with windowBits=15+16 for gzip format
+    if (inflateInit2(&stream, 15 + 16) != Z_OK) {
+        free(buffer);
+        return NULL;
+    }
+
+    int ret = inflate(&stream, Z_FINISH);
+    inflateEnd(&stream);
+
+    if (ret != Z_STREAM_END) {
+        LOG("Gzip decompression failed: %d", ret);
+        free(buffer);
+        return NULL;
+    }
+
+    *decompressed_len = stream.total_out;
+    buffer[*decompressed_len] = '\0'; // Null terminate for JSON parsing
+    return buffer;
+}
+
 static manifest_t* resolve_manifest(const cmdline_t *cmd) {
     // Try volant.manifest from cmdline first
     const char *manifest_encoded = cmdline_get(cmd, "volant.manifest");
     if (manifest_encoded) {
-        unsigned char *manifest_json = NULL;
-        size_t json_len = base64_decode(manifest_encoded, &manifest_json);
+        unsigned char *compressed = NULL;
+        size_t compressed_len = base64_decode(manifest_encoded, &compressed);
 
-        if (json_len > 0 && manifest_json) {
-            // TODO: decompress gzip if needed
-            manifest_t *m = parse_manifest_simple((char*)manifest_json);
-            free(manifest_json);
-            return m;
+        if (compressed_len > 0 && compressed) {
+            // Decompress gzip
+            size_t json_len = 0;
+            unsigned char *manifest_json = gzip_decompress(compressed, compressed_len, &json_len);
+            free(compressed);
+
+            if (json_len > 0 && manifest_json) {
+                LOG("Decompressed manifest: %zu bytes", json_len);
+                manifest_t *m = parse_manifest_simple((char*)manifest_json);
+                free(manifest_json);
+                return m;
+            } else {
+                LOG("Failed to decompress manifest");
+            }
         }
     }
 
