@@ -125,21 +125,7 @@ __attribute__((noreturn)) static void panic(const char *msg) {
     for(;;) sleep(3600);
 }
 
-static char* trim_whitespace(char *str) {
-    if (!str) return NULL;
-
-    // Trim leading
-    while (isspace((unsigned char)*str)) str++;
-
-    // Trim trailing
-    char *end = str + strlen(str) - 1;
-    while (end > str && isspace((unsigned char)*end)) {
-        *end = '\0';
-        end--;
-    }
-
-    return str;
-}
+// Removed: trim_whitespace - not needed
 
 static char* xstrdup(const char *s) {
     if (!s) return NULL;
@@ -844,7 +830,8 @@ static void handle_health_check(int client_fd) {
         "{\"status\":\"ok\",\"version\":\"%s\",\"uptime\":%ld}\r\n",
         KESTREL_VERSION, uptime);
 
-    write(client_fd, response, len);
+    ssize_t written = write(client_fd, response, len);
+    (void)written; // Ignore write errors for health check
 }
 
 static void handle_http_request(int client_fd) {
@@ -864,7 +851,8 @@ static void handle_http_request(int client_fd) {
     } else {
         // 404 for everything else (TODO: add reverse proxy)
         const char *response = "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n";
-        write(client_fd, response, strlen(response));
+        ssize_t written = write(client_fd, response, strlen(response));
+        (void)written; // Ignore write errors for 404
     }
 
     close(client_fd);
