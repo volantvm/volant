@@ -55,8 +55,10 @@ func TestEngineCreateAndDestroyVM(t *testing.T) {
 		Name:     "vm-test-1",
 		Image:    "browser",
 		Runtime:  "browser",
-		CPUCores: 2,
-		MemoryMB: 2048,
+		Overrides: vmconfig.Overrides{
+			CPUCores: intPtr(2),
+			MemoryMB: intPtr(2048),
+		},
 		Manifest: &imagespec.Manifest{Name: "browser", Runtime: "browser"},
 	})
 	if err != nil {
@@ -263,3 +265,8 @@ func (n *testNetworkManager) CleanupTap(ctx context.Context, tapName string) err
 var _ runtime.Launcher = (*testLauncher)(nil)
 var _ runtime.Instance = (*testInstance)(nil)
 var _ network.Manager = (*testNetworkManager)(nil)
+
+// intPtr returns a pointer to an int
+func intPtr(i int) *int {
+	return &i
+}
