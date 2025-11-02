@@ -64,20 +64,26 @@ if [[ -n "$BUSYBOX_SHA256" ]]; then
 fi
 echo "SOURCE_DATE_EPOCH=$SDE"
 
-# Build kestrel deterministically (static CGO off, trim paths, no buildid)
-export CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off GOFLAGS="-trimpath"
-go build -buildvcs=false -ldflags "-s -w -buildid=" -o "$ROOT_DIR/kestrel" ../cmd/kestrel
+# Build unified kestrel.c (PID 1 init + workload supervisor + API server)
+# Static build with no build-id for reproducibility
+echo "Compiling unified kestrel (C implementation)..."
+gcc -static -s -Wl,--build-id=none -O2 -Wall -Wextra \
+  "$ROOT_DIR/kestrel.c" -o "$ROOT_DIR/kestrel" || {
+    echo "ERROR: kestrel.c compilation failed"
+    exit 1
+  }
+chmod 0755 "$ROOT_DIR/kestrel"
+echo "kestrel compiled successfully"
 
 # Prepare staging directory
 WORKDIR=/tmp/initramfs
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"/{bin,sbin,etc,proc,sys,dev,usr/bin,usr/sbin,lib/modules}
 
-# 1) Install deterministic init (static, no build-id)
-gcc -static -s -Wl,--build-id=none "$ROOT_DIR/init.c" -o "$WORKDIR/init"
+# 1) Install kestrel as both /init (PID 1) and /bin/kestrel (for compatibility)
+cp "$ROOT_DIR/kestrel" "$WORKDIR/init"
 chmod 0755 "$WORKDIR/init"
 
-# 2) Place kestrel
 cp "$ROOT_DIR/kestrel" "$WORKDIR/bin/kestrel"
 chmod 0755 "$WORKDIR/bin/kestrel"
 

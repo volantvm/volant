@@ -313,9 +313,55 @@ func mountRootfs(device, fsType string) error {
 	return nil
 }
 
+// loadKernelModule attempts to load a kernel module by name.
+// Returns nil if the module is already loaded or successfully loaded.
+func loadKernelModule(moduleName string) error {
+	// Check if module is already loaded
+	modules, err := os.ReadFile("/proc/modules")
+	if err == nil && strings.Contains(string(modules), moduleName) {
+		return nil // Already loaded
+	}
+
+	// Try to load using modprobe (if available)
+	if err := exec.Command("modprobe", moduleName).Run(); err == nil {
+		return nil
+	}
+
+	// Fallback: Try to find and load .ko file directly
+	paths := []string{
+		"/lib/modules/" + moduleName + ".ko",
+		"/lib/modules/" + moduleName + ".ko.gz",
+		"/lib/modules/" + moduleName + ".ko.xz",
+		"/lib/modules/" + moduleName + ".ko.zst",
+	}
+
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		// Use finit_module syscall (313 on x86_64, 379 on arm64)
+		if err := unix.FinitModule(0, "", 0); err == nil {
+			// Try init_module as fallback
+			if err := unix.InitModule(data, ""); err != nil && !errors.Is(err, unix.EEXIST) {
+				continue
+			}
+			return nil
+		}
+	}
+
+	// Module not found or failed to load - not necessarily fatal if built into kernel
+	return nil
+}
+
 // mountSquashfsWithOverlay mounts a squashfs device with overlayfs on top for writes.
 // This provides Docker-like layered filesystem support.
 func mountSquashfsWithOverlay(device string) error {
+	// Load required kernel modules (they may be built into kernel, so errors are non-fatal)
+	_ = loadKernelModule("squashfs")
+	_ = loadKernelModule("overlay")
+
 	// Get overlay size from kernel cmdline (default 1G)
 	overlaySize := cmdlineValue("overlay_size")
 	if overlaySize == "" {
