@@ -76,6 +76,18 @@ static __always_inline void update_stats(__u32 idx, __u64 bytes)
 		__sync_fetch_and_add(count, bytes);
 }
 
+static __always_inline __u16 bpf_csum_fold(__u32 csum)
+{
+	csum = (csum & 0xffff) + (csum >> 16);
+	csum = (csum & 0xffff) + (csum >> 16);
+	return (__u16)~csum;
+}
+
+static __always_inline __u32 bpf_csum_unfold(__u16 csum)
+{
+	return (__u32)csum;
+}
+
 // XDP ingress: rewrites destination for incoming packets
 SEC("xdp")
 int drift_l4_ingress(struct xdp_md *ctx)
@@ -123,13 +135,22 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		__be32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
-		// Rewrite packet - rely on NIC checksum offload
+		// Save old values for checksum calculation
+		__be32 old_dst_ip = iph->daddr;
+		__be16 old_dst_port = tcph->dest;
+
+		// Update TCP checksum using incremental update
+		__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+		csum_diff = bpf_csum_diff(&old_dst_port, sizeof(old_dst_port), &new_dst_port, sizeof(new_dst_port), csum_diff);
+		tcph->check = bpf_csum_fold(bpf_csum_unfold(tcph->check) + csum_diff);
+
+		// Update IP checksum using incremental update
+		csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+		iph->check = bpf_csum_fold(bpf_csum_unfold(iph->check) + csum_diff);
+
+		// Rewrite packet
 		iph->daddr = new_dst_ip;
 		tcph->dest = new_dst_port;
-
-		// Invalidate checksums - let NIC/kernel recalculate with offload
-		tcph->check = 0;
-		iph->check = 0;
 
 		// Create conntrack entry
 		struct conntrack_key ct_key = {
@@ -178,13 +199,24 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		__be32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
-		// Rewrite packet - rely on NIC checksum offload
+		// Save old values for checksum calculation
+		__be32 old_dst_ip = iph->daddr;
+		__be16 old_dst_port = udph->dest;
+
+		// Update UDP checksum if present
+		if (udph->check) {
+			__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+			csum_diff = bpf_csum_diff(&old_dst_port, sizeof(old_dst_port), &new_dst_port, sizeof(new_dst_port), csum_diff);
+			udph->check = bpf_csum_fold(bpf_csum_unfold(udph->check) + csum_diff);
+		}
+
+		// Update IP checksum using incremental update
+		__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+		iph->check = bpf_csum_fold(bpf_csum_unfold(iph->check) + csum_diff);
+
+		// Rewrite packet
 		iph->daddr = new_dst_ip;
 		udph->dest = new_dst_port;
-
-		// Invalidate checksums - let NIC/kernel recalculate with offload
-		udph->check = 0;
-		iph->check = 0;
 
 		// Create conntrack entry
 		struct conntrack_key ct_key = {
