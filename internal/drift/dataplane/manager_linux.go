@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/cilium/ebpf"
@@ -183,7 +184,7 @@ func pinAndReuseMap(m *ebpf.Map, destColl *ebpf.Collection, name string) error {
 	// Pin the map
 	if err := m.Pin(pinPath); err != nil {
 		// If already exists, that's fine
-		if !errors.Is(err, ebpf.ErrMapAlreadyExists) {
+		if !errors.Is(err, os.ErrExist) {
 			return err
 		}
 	}
