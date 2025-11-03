@@ -17,20 +17,20 @@ import (
 )
 
 type manager struct {
-	logger        *slog.Logger
-	xdpProgram    *ebpf.Program
-	egressProgram *ebpf.Program
-	portmap       *ebpf.Map
-	conntrack     *ebpf.Map
-	stats         *ebpf.Map
-	xdpLink       link.Link
-	egressLink    link.Link
-	extInterface  string
-	brInterface   string
-	mu            sync.Mutex
-	closed        bool
-	xdpColl       *ebpf.Collection
-	egressColl    *ebpf.Collection
+	logger         *slog.Logger
+	ingressProgram *ebpf.Program
+	egressProgram  *ebpf.Program
+	portmap        *ebpf.Map
+	conntrack      *ebpf.Map
+	stats          *ebpf.Map
+	ingressLink    link.Link
+	egressLink     link.Link
+	extInterface   string
+	brInterface    string
+	mu             sync.Mutex
+	closed         bool
+	ingressColl    *ebpf.Collection
+	egressColl     *ebpf.Collection
 }
 
 func newManager(opts Options) (Interface, error) {
@@ -44,105 +44,106 @@ func newManager(opts Options) (Interface, error) {
 		return nil, fmt.Errorf("dataplane: bridge interface name required")
 	}
 
-	// Determine paths for XDP and egress programs
-	xdpPath := opts.ObjectPath + "_xdp.bpf.o"
+	// Determine paths for ingress and egress programs
+	ingressPath := opts.ObjectPath + "_ingress.bpf.o"
 	egressPath := opts.ObjectPath + "_egress.bpf.o"
 
-	// Load XDP collection (ingress)
-	xdpColl, err := ebpf.LoadCollection(xdpPath)
+	// Load ingress collection
+	ingressColl, err := ebpf.LoadCollection(ingressPath)
 	if err != nil {
-		return nil, fmt.Errorf("dataplane: load xdp collection: %w", err)
+		return nil, fmt.Errorf("dataplane: load ingress collection: %w", err)
 	}
 
 	// Load egress collection
 	egressColl, err := ebpf.LoadCollection(egressPath)
 	if err != nil {
-		xdpColl.Close()
+		ingressColl.Close()
 		return nil, fmt.Errorf("dataplane: load egress collection: %w", err)
 	}
 
-	// Get XDP program
-	xdpProg, ok := xdpColl.Programs["drift_l4_ingress"]
+	// Get ingress program
+	ingressProg, ok := ingressColl.Programs["drift_l4_ingress"]
 	if !ok {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
-		return nil, errors.New("dataplane: program drift_l4_ingress not found in xdp collection")
+		return nil, errors.New("dataplane: program drift_l4_ingress not found in ingress collection")
 	}
 
 	// Get egress program
 	egressProg, ok := egressColl.Programs["drift_l4_egress"]
 	if !ok {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, errors.New("dataplane: program drift_l4_egress not found in egress collection")
 	}
 
-	// Get shared maps from XDP collection (ingress creates them)
-	portmap, ok := xdpColl.Maps["portmap"]
+	// Get shared maps from ingress collection (ingress creates them)
+	portmap, ok := ingressColl.Maps["portmap"]
 	if !ok {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, errors.New("dataplane: portmap not found")
 	}
 
-	conntrack, ok := xdpColl.Maps["conntrack"]
+	conntrack, ok := ingressColl.Maps["conntrack"]
 	if !ok {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, errors.New("dataplane: conntrack not found")
 	}
 
-	stats, ok := xdpColl.Maps["stats"]
+	stats, ok := ingressColl.Maps["stats"]
 	if !ok {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, errors.New("dataplane: stats not found")
 	}
 
 	// Pin shared maps and update egress collection to use them
 	if err := pinAndReuseMap(conntrack, egressColl, "conntrack"); err != nil {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, fmt.Errorf("dataplane: reuse conntrack map: %w", err)
 	}
 
 	if err := pinAndReuseMap(stats, egressColl, "stats"); err != nil {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, fmt.Errorf("dataplane: reuse stats map: %w", err)
 	}
 
-	// Determine external interface for XDP attachment
+	// Determine external interface for TC ingress attachment
 	extIface := opts.ExternalInterface
 	if extIface == "" {
 		extIface = opts.Interface // Fallback to bridge if not specified
 	}
 
-	// Attach XDP to external interface
+	// Attach TC ingress to external interface
 	extIfaceObj, err := net.InterfaceByName(extIface)
 	if err != nil {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, fmt.Errorf("dataplane: lookup external interface %s: %w", extIface, err)
 	}
 
-	xdpLink, err := link.AttachXDP(link.XDPOptions{
-		Program:   xdpProg,
+	ingressLink, err := link.AttachTCX(link.TCXOptions{
+		Program:   ingressProg,
 		Interface: extIfaceObj.Index,
+		Attach:    ebpf.AttachTCXIngress,
 	})
 	if err != nil {
-		xdpColl.Close()
+		ingressColl.Close()
 		egressColl.Close()
-		return nil, fmt.Errorf("dataplane: attach xdp: %w", err)
+		return nil, fmt.Errorf("dataplane: attach tc ingress: %w", err)
 	}
 
-	opts.Logger.Info("drift dataplane XDP attached", "interface", extIface)
+	opts.Logger.Info("drift dataplane TC ingress attached", "interface", extIface)
 
 	// Attach TC egress to bridge
 	brIfaceObj, err := net.InterfaceByName(opts.Interface)
 	if err != nil {
-		xdpLink.Close()
-		xdpColl.Close()
+		ingressLink.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, fmt.Errorf("dataplane: lookup bridge interface %s: %w", opts.Interface, err)
 	}
@@ -153,8 +154,8 @@ func newManager(opts Options) (Interface, error) {
 		Attach:    ebpf.AttachTCXEgress,
 	})
 	if err != nil {
-		xdpLink.Close()
-		xdpColl.Close()
+		ingressLink.Close()
+		ingressColl.Close()
 		egressColl.Close()
 		return nil, fmt.Errorf("dataplane: attach tc egress: %w", err)
 	}
@@ -162,18 +163,18 @@ func newManager(opts Options) (Interface, error) {
 	opts.Logger.Info("drift dataplane TC egress attached", "interface", opts.Interface)
 
 	return &manager{
-		logger:        opts.Logger.With("component", "dataplane"),
-		xdpProgram:    xdpProg,
-		egressProgram: egressProg,
-		portmap:       portmap,
-		conntrack:     conntrack,
-		stats:         stats,
-		xdpLink:       xdpLink,
-		egressLink:    egressLink,
-		extInterface:  extIface,
-		brInterface:   opts.Interface,
-		xdpColl:       xdpColl,
-		egressColl:    egressColl,
+		logger:         opts.Logger.With("component", "dataplane"),
+		ingressProgram: ingressProg,
+		egressProgram:  egressProg,
+		portmap:        portmap,
+		conntrack:      conntrack,
+		stats:          stats,
+		ingressLink:    ingressLink,
+		egressLink:     egressLink,
+		extInterface:   extIface,
+		brInterface:    opts.Interface,
+		ingressColl:    ingressColl,
+		egressColl:     egressColl,
 	}, nil
 }
 
@@ -303,14 +304,14 @@ func (m *manager) Close() error {
 	}
 	m.closed = true
 
-	if m.xdpLink != nil {
-		_ = m.xdpLink.Close()
+	if m.ingressLink != nil {
+		_ = m.ingressLink.Close()
 	}
 	if m.egressLink != nil {
 		_ = m.egressLink.Close()
 	}
-	if m.xdpColl != nil {
-		m.xdpColl.Close()
+	if m.ingressColl != nil {
+		m.ingressColl.Close()
 	}
 	if m.egressColl != nil {
 		m.egressColl.Close()
