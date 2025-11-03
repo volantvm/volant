@@ -187,7 +187,10 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		bpf_map_update_elem(&conntrack, &ct_key, &ct_val, BPF_ANY);
 
 		update_stats(STAT_INGRESS_PACKETS, 1);
-		update_stats(STAT_INGRESS_BYTES, (__u64)((void *)(long)ctx->data_end - (void *)(long)ctx->data));
+		// Convert packet pointers to scalars for length calculation
+		unsigned long pkt_end = (unsigned long)ctx->data_end;
+		unsigned long pkt_start = (unsigned long)ctx->data;
+		update_stats(STAT_INGRESS_BYTES, pkt_end - pkt_start);
 
 		return XDP_PASS; // Let kernel route the rewritten packet
 
@@ -262,7 +265,10 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		bpf_map_update_elem(&conntrack, &ct_key, &ct_val, BPF_ANY);
 
 		update_stats(STAT_INGRESS_PACKETS, 1);
-		update_stats(STAT_INGRESS_BYTES, (__u64)((void *)(long)ctx->data_end - (void *)(long)ctx->data));
+		// Convert packet pointers to scalars for length calculation
+		unsigned long pkt_end = (unsigned long)ctx->data_end;
+		unsigned long pkt_start = (unsigned long)ctx->data;
+		update_stats(STAT_INGRESS_BYTES, pkt_end - pkt_start);
 
 		return XDP_PASS;
 	}
