@@ -8,9 +8,11 @@ LLVM_STRIP ?= llvm-strip
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
-BPF_SRC := internal/drift/bpf/drift_l4.c
-BPF_OBJ := internal/drift/bpf/bin/drift_l4.bpf.o
-BPF_DIR := $(patsubst %/,%,$(dir $(BPF_SRC)))
+BPF_DIR := internal/drift/bpf
+BPF_XDP_SRC := $(BPF_DIR)/drift_l4_xdp.c
+BPF_EGRESS_SRC := $(BPF_DIR)/drift_l4_egress.c
+BPF_XDP_OBJ := $(BPF_DIR)/bin/drift_l4_xdp.bpf.o
+BPF_EGRESS_OBJ := $(BPF_DIR)/bin/drift_l4_egress.bpf.o
 VMLINUX_H := $(BPF_DIR)/vmlinux.h
 
 ifeq ($(UNAME_M),x86_64)
@@ -41,12 +43,14 @@ help: ## Show available make targets
 build: build-server build-agent build-cli build-drift ## Build all core binaries into $(BIN_DIR)
 
 .PHONY: build-drift-bpf
-build-drift-bpf: ## Build the Drift eBPF object (Linux only)
+build-drift-bpf: ## Build the Drift eBPF objects (Linux only)
 ifeq ($(UNAME_S),Linux)
 build-drift-bpf: $(VMLINUX_H)
-	mkdir -p $(dir $(BPF_OBJ))
-	$(CLANG) $(BPF_CFLAGS) $(BPF_CINCLUDES) -c $(BPF_SRC) -o $(BPF_OBJ)
-	-$(LLVM_STRIP) -g $(BPF_OBJ)
+	mkdir -p $(BPF_DIR)/bin
+	$(CLANG) $(BPF_CFLAGS) $(BPF_CINCLUDES) -c $(BPF_XDP_SRC) -o $(BPF_XDP_OBJ)
+	$(CLANG) $(BPF_CFLAGS) $(BPF_CINCLUDES) -c $(BPF_EGRESS_SRC) -o $(BPF_EGRESS_OBJ)
+	-$(LLVM_STRIP) -g $(BPF_XDP_OBJ)
+	-$(LLVM_STRIP) -g $(BPF_EGRESS_OBJ)
 else
 	@echo "build-drift-bpf skipped: requires Linux (current: $(UNAME_S))"
 endif
@@ -89,7 +93,8 @@ endif
 build-drift: ## Build the driftd control daemon
 	mkdir -p $(BIN_DIR)
 	$(GO) build -o $(BIN_DIR)/driftd ./cmd/driftd
-	@if [ -f "$(BPF_OBJ)" ]; then cp "$(BPF_OBJ)" "$(BIN_DIR)/drift_l4.bpf.o"; fi
+	@if [ -f "$(BPF_XDP_OBJ)" ]; then cp "$(BPF_XDP_OBJ)" "$(BIN_DIR)/drift_l4_xdp.bpf.o"; fi
+	@if [ -f "$(BPF_EGRESS_OBJ)" ]; then cp "$(BPF_EGRESS_OBJ)" "$(BIN_DIR)/drift_l4_egress.bpf.o"; fi
 
 .PHONY: build-openapi-export
 build-openapi-export: ## Build the openapi-export utility
@@ -107,13 +112,15 @@ install: build build-drift ## Install core binaries and drift into INSTALL_DIR (
 	install -m 0755 $(BIN_DIR)/kestrel $(INSTALL_DIR)/kestrel
 	install -m 0755 $(BIN_DIR)/volar $(INSTALL_DIR)/volar
 	install -m 0755 $(BIN_DIR)/driftd $(INSTALL_DIR)/driftd
-	@if [ -f "$(BIN_DIR)/drift_l4.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4.bpf.o" "$(INSTALL_DIR)/drift_l4.bpf.o"; fi
+	@if [ -f "$(BIN_DIR)/drift_l4_xdp.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_xdp.bpf.o" "$(INSTALL_DIR)/drift_l4_xdp.bpf.o"; fi
+	@if [ -f "$(BIN_DIR)/drift_l4_egress.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_egress.bpf.o" "$(INSTALL_DIR)/drift_l4_egress.bpf.o"; fi
 
 .PHONY: install-drift
-install-drift: build-drift ## Install driftd binary, BPF object, and systemd unit
+install-drift: build-drift ## Install driftd binary, BPF objects, and systemd unit
 	mkdir -p $(INSTALL_DIR)
 	install -m 0755 $(BIN_DIR)/driftd $(INSTALL_DIR)/driftd
-	@if [ -f "$(BIN_DIR)/drift_l4.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4.bpf.o" "$(INSTALL_DIR)/drift_l4.bpf.o"; fi
+	@if [ -f "$(BIN_DIR)/drift_l4_xdp.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_xdp.bpf.o" "$(INSTALL_DIR)/drift_l4_xdp.bpf.o"; fi
+	@if [ -f "$(BIN_DIR)/drift_l4_egress.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_egress.bpf.o" "$(INSTALL_DIR)/drift_l4_egress.bpf.o"; fi
 	mkdir -p $(SYSTEMD_DIR)
 	install -m 0644 build/systemd/driftd.service $(SYSTEMD_DIR)/driftd.service
 

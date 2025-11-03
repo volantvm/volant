@@ -14,7 +14,7 @@ const (
 	defaultBridgeName      = "vbr0"
 	defaultExternalIF      = "auto" // auto-detect external interface
 	defaultStateDir        = "~/.volant/drift"
-	defaultBPFObject       = "drift_l4.bpf.o"
+	defaultBPFObject       = "drift_l4" // Base path - manager appends _xdp.bpf.o and _egress.bpf.o
 )
 
 // Config captures runtime settings for the Drift control daemon.

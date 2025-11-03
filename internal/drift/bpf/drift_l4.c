@@ -401,9 +401,11 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		}
 
 		// Track connection for reverse NAT
+		// Convert dst_ip to network byte order for conntrack key
+		__be32 dst_ip_nbo = bpf_htonl(dst_ip);
 		struct conntrack_key ct_key = {
 			.src_ip = iph->saddr,
-			.dst_ip = dst_ip,
+			.dst_ip = dst_ip_nbo,
 			.src_port = tcph->source,
 			.dst_port = dst_port,
 			.proto = proto,
@@ -497,9 +499,11 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		}
 
 		// Track connection for reverse NAT
+		// Convert dst_ip to network byte order for conntrack key
+		__be32 dst_ip_nbo = bpf_htonl(dst_ip);
 		struct conntrack_key ct_key = {
 			.src_ip = iph->saddr,
-			.dst_ip = dst_ip,
+			.dst_ip = dst_ip_nbo,
 			.src_port = udph->source,
 			.dst_port = dst_port,
 			.proto = proto,
