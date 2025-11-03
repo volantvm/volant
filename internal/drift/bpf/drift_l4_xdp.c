@@ -140,12 +140,12 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		__be16 old_dst_port = tcph->dest;
 
 		// Update TCP checksum using incremental update
-		__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
-		csum_diff = bpf_csum_diff(&old_dst_port, sizeof(old_dst_port), &new_dst_port, sizeof(new_dst_port), csum_diff);
+		__u32 csum_diff = bpf_csum_diff((__be32*)&old_dst_ip, sizeof(old_dst_ip), (__be32*)&new_dst_ip, sizeof(new_dst_ip), 0);
+		csum_diff = bpf_csum_diff((__be32*)&old_dst_port, sizeof(old_dst_port), (__be32*)&new_dst_port, sizeof(new_dst_port), csum_diff);
 		tcph->check = bpf_csum_fold(bpf_csum_unfold(tcph->check) + csum_diff);
 
 		// Update IP checksum using incremental update
-		csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+		csum_diff = bpf_csum_diff((__be32*)&old_dst_ip, sizeof(old_dst_ip), (__be32*)&new_dst_ip, sizeof(new_dst_ip), 0);
 		iph->check = bpf_csum_fold(bpf_csum_unfold(iph->check) + csum_diff);
 
 		// Rewrite packet
@@ -205,13 +205,13 @@ int drift_l4_ingress(struct xdp_md *ctx)
 
 		// Update UDP checksum if present
 		if (udph->check) {
-			__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
-			csum_diff = bpf_csum_diff(&old_dst_port, sizeof(old_dst_port), &new_dst_port, sizeof(new_dst_port), csum_diff);
+			__u32 csum_diff = bpf_csum_diff((__be32*)&old_dst_ip, sizeof(old_dst_ip), (__be32*)&new_dst_ip, sizeof(new_dst_ip), 0);
+			csum_diff = bpf_csum_diff((__be32*)&old_dst_port, sizeof(old_dst_port), (__be32*)&new_dst_port, sizeof(new_dst_port), csum_diff);
 			udph->check = bpf_csum_fold(bpf_csum_unfold(udph->check) + csum_diff);
 		}
 
 		// Update IP checksum using incremental update
-		__u32 csum_diff = bpf_csum_diff(&old_dst_ip, sizeof(old_dst_ip), &new_dst_ip, sizeof(new_dst_ip), 0);
+		__u32 csum_diff = bpf_csum_diff((__be32*)&old_dst_ip, sizeof(old_dst_ip), (__be32*)&new_dst_ip, sizeof(new_dst_ip), 0);
 		iph->check = bpf_csum_fold(bpf_csum_unfold(iph->check) + csum_diff);
 
 		// Rewrite packet
