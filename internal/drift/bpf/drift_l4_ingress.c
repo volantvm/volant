@@ -114,9 +114,12 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		if (!val)
 			return TC_ACT_OK;
 
-		// Store original destination for conntrack
+		// CRITICAL: Save all values BEFORE modifying packet
+		// (packet-modifying helpers invalidate all packet pointers)
 		__be32 orig_dst_ip = iph->daddr;
 		__be16 orig_dst_port = tcph->dest;
+		__be32 client_src_ip = iph->saddr;
+		__be16 client_src_port = tcph->source;
 
 		// Rewrite destination
 		__be32 new_dst_ip = val->dst_ip;
@@ -145,11 +148,11 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		                        &new_dst_ip, sizeof(new_dst_ip), 0))
 			return TC_ACT_OK;
 
-		// Create conntrack entry
+		// Create conntrack entry using saved values
 		struct conntrack_key ct_key = {
-			.src_ip = iph->saddr,
+			.src_ip = client_src_ip,
 			.dst_ip = new_dst_ip,
-			.src_port = tcph->source,
+			.src_port = client_src_port,
 			.dst_port = new_dst_port,
 			.proto = proto,
 		};
@@ -179,9 +182,11 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		if (!val)
 			return TC_ACT_OK;
 
-		// Store original destination
+		// CRITICAL: Save all values BEFORE modifying packet
 		__be32 orig_dst_ip = iph->daddr;
 		__be16 orig_dst_port = udph->dest;
+		__be32 client_src_ip = iph->saddr;
+		__be16 client_src_port = udph->source;
 
 		// Rewrite destination
 		__be32 new_dst_ip = val->dst_ip;
@@ -212,11 +217,11 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		                        &new_dst_ip, sizeof(new_dst_ip), 0))
 			return TC_ACT_OK;
 
-		// Create conntrack entry
+		// Create conntrack entry using saved values
 		struct conntrack_key ct_key = {
-			.src_ip = iph->saddr,
+			.src_ip = client_src_ip,
 			.dst_ip = new_dst_ip,
-			.src_port = udph->source,
+			.src_port = client_src_port,
 			.dst_port = new_dst_port,
 			.proto = proto,
 		};
