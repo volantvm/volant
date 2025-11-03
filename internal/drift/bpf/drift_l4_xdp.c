@@ -117,11 +117,14 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		return XDP_PASS;
 
 	__u8 proto = iph->protocol;
+	__u32 iph_len = iph->ihl * 4;
 
 	if (proto == IPPROTO_TCP) {
-		struct tcphdr *tcph = (void *)iph + (iph->ihl * 4);
-		if ((void *)(tcph + 1) > data_end)
+		void *l4 = data + ETH_HLEN + iph_len;
+		if (l4 + sizeof(struct tcphdr) > data_end)
 			return XDP_PASS;
+
+		struct tcphdr *tcph = l4;
 
 		// Lookup port mapping
 		struct portmap_key key = {
@@ -191,9 +194,11 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		return XDP_PASS; // Let kernel route the rewritten packet
 
 	} else if (proto == IPPROTO_UDP) {
-		struct udphdr *udph = (void *)iph + (iph->ihl * 4);
-		if ((void *)(udph + 1) > data_end)
+		void *l4 = data + ETH_HLEN + iph_len;
+		if (l4 + sizeof(struct udphdr) > data_end)
 			return XDP_PASS;
+
+		struct udphdr *udph = l4;
 
 		// Lookup port mapping
 		struct portmap_key key = {
