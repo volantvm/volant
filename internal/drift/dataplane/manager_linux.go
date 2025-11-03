@@ -101,10 +101,10 @@ func newManager(opts Options) (Interface, error) {
 		return nil, errors.New("dataplane: backend_config not found")
 	}
 
-	configMap, ok := coll.Maps["config"]
+	configMap, ok := coll.Maps["drift_config"]
 	if !ok {
 		coll.Close()
-		return nil, errors.New("dataplane: config not found")
+		return nil, errors.New("dataplane: drift_config not found")
 	}
 
 	iface, err := net.InterfaceByName(opts.Interface)

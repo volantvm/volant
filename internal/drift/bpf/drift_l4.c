@@ -134,7 +134,7 @@ struct {
 	__uint(max_entries, 1);
 	__type(key, __u32);
 	__type(value, __u32);
-} config SEC(".maps");
+} drift_config SEC(".maps");
 
 static __always_inline void update_stats(__u32 idx, __u64 bytes)
 {
@@ -241,7 +241,7 @@ static __always_inline int rewrite_tcp(struct __sk_buff *skb, struct iphdr *iph,
 
 	// Check if we need to redirect to bridge interface
 	__u32 key = CONFIG_BRIDGE_IFINDEX;
-	__u32 *bridge_ifindex = bpf_map_lookup_elem(&config, &key);
+	__u32 *bridge_ifindex = bpf_map_lookup_elem(&drift_config, &key);
 	if (bridge_ifindex && *bridge_ifindex > 0) {
 		// Redirect to bridge interface
 		return bpf_redirect(*bridge_ifindex, 0);
@@ -272,7 +272,7 @@ static __always_inline int rewrite_udp(struct __sk_buff *skb, struct iphdr *iph,
 
 	// Check if we need to redirect to bridge interface
 	__u32 key = CONFIG_BRIDGE_IFINDEX;
-	__u32 *bridge_ifindex = bpf_map_lookup_elem(&config, &key);
+	__u32 *bridge_ifindex = bpf_map_lookup_elem(&drift_config, &key);
 	if (bridge_ifindex && *bridge_ifindex > 0) {
 		// Redirect to bridge interface
 		return bpf_redirect(*bridge_ifindex, 0);
