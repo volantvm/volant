@@ -10,6 +10,10 @@
 #define TC_ACT_REDIRECT 7
 #endif
 
+#ifndef BPF_F_INGRESS
+#define BPF_F_INGRESS (1U << 0)
+#endif
+
 #ifndef ETH_P_IP
 #define ETH_P_IP 0x0800
 #define ETH_HLEN 14
@@ -240,11 +244,12 @@ static __always_inline int rewrite_tcp(struct __sk_buff *skb, struct iphdr *iph,
 		return TC_ACT_OK;
 
 	// Check if we need to redirect to bridge interface
+	// Only redirect if we're NOT already on the bridge (avoid loop)
 	__u32 key = CONFIG_BRIDGE_IFINDEX;
 	__u32 *bridge_ifindex = bpf_map_lookup_elem(&drift_config, &key);
-	if (bridge_ifindex && *bridge_ifindex > 0) {
-		// Redirect to bridge interface
-		return bpf_redirect(*bridge_ifindex, 0);
+	if (bridge_ifindex && *bridge_ifindex > 0 && skb->ifindex != *bridge_ifindex) {
+		// Redirect to bridge interface ingress (as if packet arrived there)
+		return bpf_redirect(*bridge_ifindex, BPF_F_INGRESS);
 	}
 
 	return TC_ACT_OK;
@@ -271,11 +276,12 @@ static __always_inline int rewrite_udp(struct __sk_buff *skb, struct iphdr *iph,
 		return TC_ACT_OK;
 
 	// Check if we need to redirect to bridge interface
+	// Only redirect if we're NOT already on the bridge (avoid loop)
 	__u32 key = CONFIG_BRIDGE_IFINDEX;
 	__u32 *bridge_ifindex = bpf_map_lookup_elem(&drift_config, &key);
-	if (bridge_ifindex && *bridge_ifindex > 0) {
-		// Redirect to bridge interface
-		return bpf_redirect(*bridge_ifindex, 0);
+	if (bridge_ifindex && *bridge_ifindex > 0 && skb->ifindex != *bridge_ifindex) {
+		// Redirect to bridge interface ingress (as if packet arrived there)
+		return bpf_redirect(*bridge_ifindex, BPF_F_INGRESS);
 	}
 
 	return TC_ACT_OK;
