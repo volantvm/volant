@@ -119,6 +119,7 @@ install: build build-drift ## Install core binaries and drift into INSTALL_DIR (
 install-drift: build-drift ## Install driftd binary, BPF objects, and systemd unit
 	mkdir -p $(INSTALL_DIR)
 	install -m 0755 $(BIN_DIR)/driftd $(INSTALL_DIR)/driftd
+	@rm -f "$(INSTALL_DIR)/drift_l4.bpf.o"  # Remove old combined BPF object
 	@if [ -f "$(BIN_DIR)/drift_l4_xdp.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_xdp.bpf.o" "$(INSTALL_DIR)/drift_l4_xdp.bpf.o"; fi
 	@if [ -f "$(BIN_DIR)/drift_l4_egress.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_egress.bpf.o" "$(INSTALL_DIR)/drift_l4_egress.bpf.o"; fi
 	mkdir -p $(SYSTEMD_DIR)

@@ -19,7 +19,7 @@ StateDirectoryMode=0750
 RuntimeDirectory=drift
 RuntimeDirectoryMode=0750
 Environment=DRIFT_STATE_DIR=/var/lib/drift
-Environment=DRIFT_BPF_OBJECT=/usr/local/bin/drift_l4.bpf.o
+Environment=DRIFT_BPF_OBJECT=/usr/local/bin/drift_l4
 
 [Install]
 WantedBy=multi-user.target
