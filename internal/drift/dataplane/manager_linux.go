@@ -218,9 +218,9 @@ func (m *manager) ApplyBridge(_ context.Context, proto uint8, hostPort uint16, d
 		return fmt.Errorf("dataplane: destination ip %s not ipv4", destIP)
 	}
 
-	// CRITICAL: Store IP in network byte order (big-endian)
-	// Convert IP bytes to uint32 in big-endian order
-	ipBigEndian := binary.BigEndian.Uint32(ip4)
+	// CRITICAL: Store IP in NATIVE byte order so BPF can read it correctly
+	// On little-endian systems, this ensures bytes are in the right order for packet writing
+	ipValue := binary.LittleEndian.Uint32(ip4)
 
 	key := portmapKey{
 		Proto: proto,
@@ -228,7 +228,7 @@ func (m *manager) ApplyBridge(_ context.Context, proto uint8, hostPort uint16, d
 	}
 
 	value := portmapValue{
-		DestIP:   ipBigEndian,   // Already in network byte order
+		DestIP:   ipValue,
 		DestPort: htons(destPort),
 	}
 
