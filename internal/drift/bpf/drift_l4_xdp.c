@@ -76,25 +76,6 @@ static __always_inline void update_stats(__u32 idx, __u64 bytes)
 		__sync_fetch_and_add(count, bytes);
 }
 
-static __always_inline __u16 csum_fold_helper(__u32 csum)
-{
-	__u32 sum = (csum >> 16) + (csum & 0xffff);
-	sum += (sum >> 16);
-	return ~sum;
-}
-
-static __always_inline void ipv4_csum(struct iphdr *iph)
-{
-	iph->check = 0;
-	__u32 csum = 0;
-	__u16 *buf = (void *)iph;
-
-	for (int i = 0; i < sizeof(struct iphdr) >> 1; i++)
-		csum += buf[i];
-
-	iph->check = csum_fold_helper(csum);
-}
-
 // XDP ingress: rewrites destination for incoming packets
 SEC("xdp")
 int drift_l4_ingress(struct xdp_md *ctx)
@@ -142,32 +123,13 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		__be32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
-		// Update TCP checksum (simplified - assumes no TCP options)
-		__u32 csum = ~bpf_ntohs(tcph->check) & 0xffff;
-
-		// Remove old IP
-		csum += ~bpf_ntohs(iph->daddr >> 16) & 0xffff;
-		csum += ~bpf_ntohs(iph->daddr & 0xffff) & 0xffff;
-
-		// Add new IP
-		csum += bpf_ntohs(new_dst_ip >> 16) & 0xffff;
-		csum += bpf_ntohs(new_dst_ip & 0xffff) & 0xffff;
-
-		// Remove old port
-		csum += ~bpf_ntohs(tcph->dest) & 0xffff;
-
-		// Add new port
-		csum += bpf_ntohs(new_dst_port) & 0xffff;
-
-		// Fold carries
-		csum = (csum >> 16) + (csum & 0xffff);
-		csum += (csum >> 16);
-		tcph->check = bpf_htons(~csum & 0xffff);
-
-		// Rewrite IP header
+		// Rewrite packet - rely on NIC checksum offload
 		iph->daddr = new_dst_ip;
 		tcph->dest = new_dst_port;
-		ipv4_csum(iph);
+
+		// Invalidate checksums - let NIC/kernel recalculate with offload
+		tcph->check = 0;
+		iph->check = 0;
 
 		// Create conntrack entry
 		struct conntrack_key ct_key = {
@@ -216,34 +178,13 @@ int drift_l4_ingress(struct xdp_md *ctx)
 		__be32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
-		// Update UDP checksum if present
-		if (udph->check) {
-			__u32 csum = ~bpf_ntohs(udph->check) & 0xffff;
-
-			// Remove old IP
-			csum += ~bpf_ntohs(iph->daddr >> 16) & 0xffff;
-			csum += ~bpf_ntohs(iph->daddr & 0xffff) & 0xffff;
-
-			// Add new IP
-			csum += bpf_ntohs(new_dst_ip >> 16) & 0xffff;
-			csum += bpf_ntohs(new_dst_ip & 0xffff) & 0xffff;
-
-			// Remove old port
-			csum += ~bpf_ntohs(udph->dest) & 0xffff;
-
-			// Add new port
-			csum += bpf_ntohs(new_dst_port) & 0xffff;
-
-			// Fold carries
-			csum = (csum >> 16) + (csum & 0xffff);
-			csum += (csum >> 16);
-			udph->check = bpf_htons(~csum & 0xffff);
-		}
-
-		// Rewrite IP header
+		// Rewrite packet - rely on NIC checksum offload
 		iph->daddr = new_dst_ip;
 		udph->dest = new_dst_port;
-		ipv4_csum(iph);
+
+		// Invalidate checksums - let NIC/kernel recalculate with offload
+		udph->check = 0;
+		iph->check = 0;
 
 		// Create conntrack entry
 		struct conntrack_key ct_key = {
