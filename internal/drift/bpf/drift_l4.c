@@ -229,18 +229,21 @@ static __always_inline int rewrite_tcp(struct __sk_buff *skb, struct iphdr *iph,
 	__be16 old_port = tcph->dest;
 	__be32 old_ip = iph->daddr;
 
+	// Convert new_ip to network byte order for storage
+	__be32 new_ip_nbo = bpf_htonl(new_ip);
+
 	if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct tcphdr, check), old_port, new_port, sizeof(new_port)))
 		return TC_ACT_OK;
 
-	if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct tcphdr, check), old_ip, new_ip, sizeof(new_ip) | BPF_F_PSEUDO_HDR))
+	if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct tcphdr, check), old_ip, new_ip_nbo, sizeof(new_ip_nbo) | BPF_F_PSEUDO_HDR))
 		return TC_ACT_OK;
 
-	if (bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), old_ip, new_ip, sizeof(new_ip)))
+	if (bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), old_ip, new_ip_nbo, sizeof(new_ip_nbo)))
 		return TC_ACT_OK;
 
 	if (bpf_skb_store_bytes(skb, l4_off + offsetof(struct tcphdr, dest), &new_port, sizeof(new_port), 0))
 		return TC_ACT_OK;
-	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip, sizeof(new_ip), 0))
+	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip_nbo, sizeof(new_ip_nbo), 0))
 		return TC_ACT_OK;
 
 	// Check if we need to redirect to bridge interface
@@ -260,19 +263,22 @@ static __always_inline int rewrite_udp(struct __sk_buff *skb, struct iphdr *iph,
 	__be16 old_port = udph->dest;
 	__be32 old_ip = iph->daddr;
 
+	// Convert new_ip to network byte order for storage
+	__be32 new_ip_nbo = bpf_htonl(new_ip);
+
 	if (udph->check) {
 		if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct udphdr, check), old_port, new_port, sizeof(new_port)))
 			return TC_ACT_OK;
-		if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct udphdr, check), old_ip, new_ip, sizeof(new_ip) | BPF_F_PSEUDO_HDR))
+		if (bpf_l4_csum_replace(skb, l4_off + offsetof(struct udphdr, check), old_ip, new_ip_nbo, sizeof(new_ip_nbo) | BPF_F_PSEUDO_HDR))
 			return TC_ACT_OK;
 	}
 
-	if (bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), old_ip, new_ip, sizeof(new_ip)))
+	if (bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), old_ip, new_ip_nbo, sizeof(new_ip_nbo)))
 		return TC_ACT_OK;
 
 	if (bpf_skb_store_bytes(skb, l4_off + offsetof(struct udphdr, dest), &new_port, sizeof(new_port), 0))
 		return TC_ACT_OK;
-	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip, sizeof(new_ip), 0))
+	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip_nbo, sizeof(new_ip_nbo), 0))
 		return TC_ACT_OK;
 
 	// Check if we need to redirect to bridge interface
