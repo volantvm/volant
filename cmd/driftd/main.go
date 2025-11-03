@@ -42,9 +42,10 @@ func main() {
 
 	var dp dataplane.Interface
 	if manager, err := dataplane.New(dataplane.Options{
-		ObjectPath: cfg.BPFObjectPath,
-		Interface:  cfg.BridgeName,
-		Logger:     logger,
+		ObjectPath:        cfg.BPFObjectPath,
+		Interface:         cfg.BridgeName,
+		ExternalInterface: cfg.ExternalInterface,
+		Logger:            logger,
 	}); err != nil {
 		if errors.Is(err, dataplane.ErrUnsupported) {
 			logger.Warn("dataplane unavailable on this platform", "error", err)

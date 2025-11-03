@@ -16,20 +16,23 @@ import (
 )
 
 type manager struct {
-	logger          *slog.Logger
-	ingressProgram  *ebpf.Program
-	egressProgram   *ebpf.Program
-	portmap         *ebpf.Map
-	conntrack       *ebpf.Map
-	stats           *ebpf.Map
-	backends        *ebpf.Map
-	backendConfig   *ebpf.Map
-	ingressLink     link.Link
-	egressLink      link.Link
-	iface           string
-	mu              sync.Mutex
-	closed          bool
-	programs        *ebpf.Collection
+	logger              *slog.Logger
+	ingressProgram      *ebpf.Program
+	egressProgram       *ebpf.Program
+	portmap             *ebpf.Map
+	conntrack           *ebpf.Map
+	stats               *ebpf.Map
+	backends            *ebpf.Map
+	backendConfig       *ebpf.Map
+	ingressLink         link.Link
+	egressLink          link.Link
+	extIngressLink      link.Link // External interface ingress
+	extEgressLink       link.Link // External interface egress
+	iface               string
+	externalIface       string
+	mu                  sync.Mutex
+	closed              bool
+	programs            *ebpf.Collection
 }
 
 func newManager(opts Options) (Interface, error) {
@@ -129,6 +132,39 @@ func newManager(opts Options) (Interface, error) {
 
 	opts.Logger.Info("drift dataplane attached", "interface", opts.Interface, "ingress", true, "egress", true)
 
+	// Optionally attach to external interface for public IP exposure
+	var extIngressLink, extEgressLink link.Link
+	if opts.ExternalInterface != "" && opts.ExternalInterface != opts.Interface {
+		extIface, err := net.InterfaceByName(opts.ExternalInterface)
+		if err != nil {
+			opts.Logger.Warn("external interface not found, skipping", "interface", opts.ExternalInterface, "error", err)
+		} else {
+			// Attach ingress to external interface
+			extIngressLink, err = link.AttachTCX(link.TCXOptions{
+				Program:   ingressProg,
+				Interface: extIface.Index,
+				Attach:    ebpf.AttachTCXIngress,
+			})
+			if err != nil {
+				opts.Logger.Warn("failed to attach to external interface ingress", "interface", opts.ExternalInterface, "error", err)
+			} else {
+				// Attach egress to external interface
+				extEgressLink, err = link.AttachTCX(link.TCXOptions{
+					Program:   egressProg,
+					Interface: extIface.Index,
+					Attach:    ebpf.AttachTCXEgress,
+				})
+				if err != nil {
+					extIngressLink.Close()
+					opts.Logger.Warn("failed to attach to external interface egress", "interface", opts.ExternalInterface, "error", err)
+					extIngressLink = nil
+				} else {
+					opts.Logger.Info("drift dataplane attached to external interface", "interface", opts.ExternalInterface, "ingress", true, "egress", true)
+				}
+			}
+		}
+	}
+
 	return &manager{
 		logger:         opts.Logger.With("component", "dataplane"),
 		ingressProgram: ingressProg,
@@ -140,7 +176,10 @@ func newManager(opts Options) (Interface, error) {
 		backendConfig:  backendConfig,
 		ingressLink:    ingressLink,
 		egressLink:     egressLink,
+		extIngressLink: extIngressLink,
+		extEgressLink:  extEgressLink,
 		iface:          opts.Interface,
+		externalIface:  opts.ExternalInterface,
 		programs:       coll,
 	}, nil
 }
@@ -351,6 +390,12 @@ func (m *manager) Close() error {
 	}
 	if m.egressLink != nil {
 		_ = m.egressLink.Close()
+	}
+	if m.extIngressLink != nil {
+		_ = m.extIngressLink.Close()
+	}
+	if m.extEgressLink != nil {
+		_ = m.extEgressLink.Close()
 	}
 	if m.programs != nil {
 		m.programs.Close()

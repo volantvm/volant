@@ -8,9 +8,10 @@ import (
 
 // Options configures dataplane manager construction.
 type Options struct {
-	ObjectPath string
-	Interface  string
-	Logger     *slog.Logger
+	ObjectPath        string
+	Interface         string // Bridge interface (e.g., vbr0)
+	ExternalInterface string // External interface for public IP exposure (optional)
+	Logger            *slog.Logger
 }
 
 // Stats holds dataplane packet/byte counters.
