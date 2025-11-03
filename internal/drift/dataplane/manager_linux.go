@@ -101,10 +101,24 @@ func newManager(opts Options) (Interface, error) {
 		return nil, errors.New("dataplane: backend_config not found")
 	}
 
+	configMap, ok := coll.Maps["config"]
+	if !ok {
+		coll.Close()
+		return nil, errors.New("dataplane: config not found")
+	}
+
 	iface, err := net.InterfaceByName(opts.Interface)
 	if err != nil {
 		coll.Close()
 		return nil, fmt.Errorf("dataplane: lookup interface %s: %w", opts.Interface, err)
+	}
+
+	// Populate config map with bridge interface index for redirection
+	configKey := uint32(0) // CONFIG_BRIDGE_IFINDEX
+	bridgeIfindex := uint32(iface.Index)
+	if err := configMap.Put(&configKey, &bridgeIfindex); err != nil {
+		coll.Close()
+		return nil, fmt.Errorf("dataplane: set bridge ifindex: %w", err)
 	}
 
 	// Attach ingress

@@ -6,6 +6,10 @@
 #define TC_ACT_OK 0
 #endif
 
+#ifndef TC_ACT_REDIRECT
+#define TC_ACT_REDIRECT 7
+#endif
+
 #ifndef ETH_P_IP
 #define ETH_P_IP 0x0800
 #define ETH_HLEN 14
@@ -122,6 +126,16 @@ struct {
 	__type(value, struct backend_config_value);
 } backend_config SEC(".maps");
 
+// Config map: stores bridge interface index for redirection
+#define CONFIG_BRIDGE_IFINDEX 0
+
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} config SEC(".maps");
+
 static __always_inline void update_stats(__u32 idx, __u64 bytes)
 {
 	__u64 *count = bpf_map_lookup_elem(&stats, &idx);
@@ -225,6 +239,14 @@ static __always_inline int rewrite_tcp(struct __sk_buff *skb, struct iphdr *iph,
 	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip, sizeof(new_ip), 0))
 		return TC_ACT_OK;
 
+	// Check if we need to redirect to bridge interface
+	__u32 key = CONFIG_BRIDGE_IFINDEX;
+	__u32 *bridge_ifindex = bpf_map_lookup_elem(&config, &key);
+	if (bridge_ifindex && *bridge_ifindex > 0) {
+		// Redirect to bridge interface
+		return bpf_redirect(*bridge_ifindex, 0);
+	}
+
 	return TC_ACT_OK;
 }
 
@@ -247,6 +269,14 @@ static __always_inline int rewrite_udp(struct __sk_buff *skb, struct iphdr *iph,
 		return TC_ACT_OK;
 	if (bpf_skb_store_bytes(skb, l3_off + offsetof(struct iphdr, daddr), &new_ip, sizeof(new_ip), 0))
 		return TC_ACT_OK;
+
+	// Check if we need to redirect to bridge interface
+	__u32 key = CONFIG_BRIDGE_IFINDEX;
+	__u32 *bridge_ifindex = bpf_map_lookup_elem(&config, &key);
+	if (bridge_ifindex && *bridge_ifindex > 0) {
+		// Redirect to bridge interface
+		return bpf_redirect(*bridge_ifindex, 0);
+	}
 
 	return TC_ACT_OK;
 }
