@@ -121,8 +121,9 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		__be32 client_src_ip = iph->saddr;
 		__be16 client_src_port = tcph->source;
 
-		// Rewrite destination - convert from host to network byte order
-		__be32 new_dst_ip = bpf_htonl(val->dst_ip);
+		// Rewrite destination
+		// Map stores in host byte order; on little-endian, memory bytes are already correct for packet
+		__u32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
 		// Update TCP checksum
@@ -139,7 +140,7 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		                        orig_dst_ip, new_dst_ip, sizeof(new_dst_ip)))
 			return TC_ACT_OK;
 
-		// Write new values
+		// Write new values - bpf_skb_store_bytes copies memory bytes as-is
 		if (bpf_skb_store_bytes(skb, l4_off + offsetof(struct tcphdr, dest),
 		                        &new_dst_port, sizeof(new_dst_port), 0))
 			return TC_ACT_OK;
@@ -188,8 +189,9 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		__be32 client_src_ip = iph->saddr;
 		__be16 client_src_port = udph->source;
 
-		// Rewrite destination - convert from host to network byte order
-		__be32 new_dst_ip = bpf_htonl(val->dst_ip);
+		// Rewrite destination
+		// Map stores in host byte order; on little-endian, memory bytes are already correct for packet
+		__u32 new_dst_ip = val->dst_ip;
 		__be16 new_dst_port = val->dst_port;
 
 		// Update UDP checksum if present
@@ -208,7 +210,7 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		                        orig_dst_ip, new_dst_ip, sizeof(new_dst_ip)))
 			return TC_ACT_OK;
 
-		// Write new values
+		// Write new values - bpf_skb_store_bytes copies memory bytes as-is
 		if (bpf_skb_store_bytes(skb, l4_off + offsetof(struct udphdr, dest),
 		                        &new_dst_port, sizeof(new_dst_port), 0))
 			return TC_ACT_OK;
