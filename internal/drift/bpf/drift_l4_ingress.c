@@ -20,7 +20,7 @@ struct portmap_key {
 };
 
 struct portmap_value {
-	__be32 dst_ip;   // Stored in network byte order
+	__u32 dst_ip;    // Stored in HOST byte order (converted to network with bpf_htonl)
 	__be16 dst_port; // Stored in network byte order
 	__u16 pad;
 };
@@ -121,8 +121,8 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		__be32 client_src_ip = iph->saddr;
 		__be16 client_src_port = tcph->source;
 
-		// Rewrite destination
-		__be32 new_dst_ip = val->dst_ip;
+		// Rewrite destination - convert from host to network byte order
+		__be32 new_dst_ip = bpf_htonl(val->dst_ip);
 		__be16 new_dst_port = val->dst_port;
 
 		// Update TCP checksum
@@ -188,8 +188,8 @@ int drift_l4_ingress(struct __sk_buff *skb)
 		__be32 client_src_ip = iph->saddr;
 		__be16 client_src_port = udph->source;
 
-		// Rewrite destination
-		__be32 new_dst_ip = val->dst_ip;
+		// Rewrite destination - convert from host to network byte order
+		__be32 new_dst_ip = bpf_htonl(val->dst_ip);
 		__be16 new_dst_port = val->dst_port;
 
 		// Update UDP checksum if present

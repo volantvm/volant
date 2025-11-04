@@ -218,9 +218,9 @@ func (m *manager) ApplyBridge(_ context.Context, proto uint8, hostPort uint16, d
 		return fmt.Errorf("dataplane: destination ip %s not ipv4", destIP)
 	}
 
-	// CRITICAL: Store IP in network byte order (big-endian) to match BPF __be32 type
-	// BPF programs work with network byte order, and bpf_skb_store_bytes() preserves byte order
-	ipValue := binary.BigEndian.Uint32(ip4)
+	// CRITICAL: Store IP in HOST byte order (little-endian on x86)
+	// BPF programs will convert to network byte order before writing to packet
+	ipValue := binary.LittleEndian.Uint32(ip4)
 
 	key := portmapKey{
 		Proto: proto,
