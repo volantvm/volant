@@ -150,11 +150,12 @@ int drift_l4_ingress(struct __sk_buff *skb)
 			return TC_ACT_OK;
 
 		// Create conntrack entry using saved values
+		// CRITICAL: Store dst_ip in NETWORK byte order so egress lookup matches packet values
 		struct conntrack_key ct_key = {
-			.src_ip = client_src_ip,
-			.dst_ip = new_dst_ip,
-			.src_port = client_src_port,
-			.dst_port = new_dst_port,
+			.src_ip = client_src_ip,              // Network order (from packet)
+			.dst_ip = bpf_htonl(new_dst_ip),      // Convert host→network byte order
+			.src_port = client_src_port,          // Network order (from packet)
+			.dst_port = new_dst_port,             // Network order
 			.proto = proto,
 		};
 
@@ -220,11 +221,12 @@ int drift_l4_ingress(struct __sk_buff *skb)
 			return TC_ACT_OK;
 
 		// Create conntrack entry using saved values
+		// CRITICAL: Store dst_ip in NETWORK byte order so egress lookup matches packet values
 		struct conntrack_key ct_key = {
-			.src_ip = client_src_ip,
-			.dst_ip = new_dst_ip,
-			.src_port = client_src_port,
-			.dst_port = new_dst_port,
+			.src_ip = client_src_ip,              // Network order (from packet)
+			.dst_ip = bpf_htonl(new_dst_ip),      // Convert host→network byte order
+			.src_port = client_src_port,          // Network order (from packet)
+			.dst_port = new_dst_port,             // Network order
 			.proto = proto,
 		};
 
