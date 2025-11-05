@@ -413,12 +413,14 @@ static void setup_dns_from_cmdline(const cmdline_t *cmd) {
     }
 
     fprintf(f, "nameserver %s\n", dns_server);
+    fprintf(f, "nameserver 1.1.1.1\n");
+    fprintf(f, "nameserver 8.8.8.8\n");
     if (dns_search) {
         fprintf(f, "search %s\n", dns_search);
     }
     fclose(f);
 
-    LOG_BOOT("Configured DNS: nameserver=%s search=%s", dns_server, dns_search ? dns_search : "(none)");
+    LOG_BOOT("Configured DNS: nameserver=%s search=%s fallback=1.1.1.1,8.8.8.8", dns_server, dns_search ? dns_search : "(none)");
 }
 
 // ============================================================================

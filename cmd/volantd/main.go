@@ -100,12 +100,11 @@ func main() {
 
 	// Start DNS server for service discovery
 	if cfg.DNSEnabled {
-		dnsServer := dns.New(store, cfg.DNSListen, cfg.DNSDomain, cfg.DNSUpstreams, logger)
+		dnsServer := dns.New(store, cfg.DNSListen, cfg.DNSDomain, logger)
 		go func() {
 			logger.Info("dns server starting",
 				"listen", cfg.DNSListen,
-				"domain", cfg.DNSDomain,
-				"upstreams", cfg.DNSUpstreams)
+				"domain", cfg.DNSDomain)
 			if err := dnsServer.Start(ctx); err != nil {
 				logger.Error("dns server failed", "error", err)
 			}
