@@ -270,10 +270,10 @@ static void parse_cmdline(cmdline_t *cmd) {
     }
 
     LOG_BOOT("Parsed %d kernel cmdline parameters", cmd->count);
-    for (int i = 0; i < cmd->count; i++) {
-        LOG_BOOT("  param[%d]: key='%s' value='%s'", i, cmd->params[i].key,
-                 cmd->params[i].value ? cmd->params[i].value : "(null)");
-    }
+    if (cmd->count > 0) LOG_BOOT("param0: %s=%s", cmd->params[0].key, cmd->params[0].value);
+    if (cmd->count > 1) LOG_BOOT("param1: %s=%s", cmd->params[1].key, cmd->params[1].value);
+    if (cmd->count > 2) LOG_BOOT("param2: %s=%s", cmd->params[2].key, cmd->params[2].value);
+    if (cmd->count > 3) LOG_BOOT("param3: %s=%s", cmd->params[3].key, cmd->params[3].value);
 }
 
 static const char* cmdline_get(const cmdline_t *cmd, const char *key) {
@@ -374,36 +374,43 @@ static void setup_environment_from_cmdline(const cmdline_t *cmd) {
     // Parse key-value pairs manually (simplified JSON parser)
     char *ptr = start + 1;
     while (*ptr && *ptr != '}') {
-        // Skip whitespace and quotes
+        // Skip whitespace, quotes, and commas
         while (*ptr && (isspace(*ptr) || *ptr == '"' || *ptr == ',')) ptr++;
         if (!*ptr || *ptr == '}') break;
 
-        // Extract key
+        // Extract key (between quotes)
         char *key_start = ptr;
         while (*ptr && *ptr != '"' && *ptr != ':') ptr++;
-        char *key_end = ptr;
+        size_t key_len = ptr - key_start;
 
-        // Skip to value
+        // Skip to colon
         while (*ptr && *ptr != ':') ptr++;
         if (!*ptr) break;
         ptr++; // Skip ':'
+
+        // Skip whitespace and opening quote of value
         while (*ptr && (isspace(*ptr) || *ptr == '"')) ptr++;
 
-        // Extract value
+        // Extract value (until closing quote)
         char *val_start = ptr;
         while (*ptr && *ptr != '"') ptr++;
-        char *val_end = ptr;
+        size_t val_len = ptr - val_start;
 
-        // Set environment variable
-        if (key_end > key_start && val_end > val_start) {
-            *key_end = '\0';
-            *val_end = '\0';
-            setenv(key_start, val_start, 1);
-            LOG_BOOT("Set env: %s=%s", key_start, val_start);
-            env_count++;
+        // Set environment variable (copy strings to not corrupt JSON)
+        if (key_len > 0 && val_len > 0) {
+            char *key = strndup(key_start, key_len);
+            char *val = strndup(val_start, val_len);
+            if (key && val) {
+                setenv(key, val, 1);
+                LOG_BOOT("Set env: %s=%s", key, val);
+                env_count++;
+                free(key);
+                free(val);
+            }
         }
 
-        if (*ptr) ptr++;
+        // Move past closing quote
+        if (*ptr == '"') ptr++;
     }
 
     free(env_json);
