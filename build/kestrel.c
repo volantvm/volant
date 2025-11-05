@@ -175,6 +175,12 @@ static void mount_essential_filesystems(void) {
     if (mount("tmpfs", "/run", "tmpfs", 0, NULL) && errno != EBUSY) {
         panic("mount(/run)");
     }
+
+    // Create /dev/fd and standard stream symlinks for process substitution
+    symlink("/proc/self/fd", "/dev/fd");
+    symlink("/proc/self/fd/0", "/dev/stdin");
+    symlink("/proc/self/fd/1", "/dev/stdout");
+    symlink("/proc/self/fd/2", "/dev/stderr");
 }
 
 // ============================================================================
