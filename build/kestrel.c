@@ -340,7 +340,12 @@ static size_t base64_decode(const char *input, unsigned char **output) {
 static void setup_environment_from_cmdline(const cmdline_t *cmd) {
     // Parse volant.env (base64-encoded JSON: {"KEY":"VALUE",...})
     const char *env_encoded = cmdline_get(cmd, "volant.env");
-    if (!env_encoded) return;
+    if (!env_encoded) {
+        LOG_BOOT("No volant.env found in cmdline");
+        return;
+    }
+
+    LOG_BOOT("Found volant.env: %s", env_encoded);
 
     unsigned char *env_json = NULL;
     size_t json_len = base64_decode(env_encoded, &env_json);
@@ -349,6 +354,8 @@ static void setup_environment_from_cmdline(const cmdline_t *cmd) {
         LOG_BOOT("Warning: failed to decode volant.env");
         return;
     }
+
+    LOG_BOOT("Decoded env JSON (%zu bytes): %s", json_len, (char*)env_json);
 
     // Simple JSON parser for {"key":"value", ...}
     // This is minimal - for production, use cJSON or similar
@@ -388,6 +395,7 @@ static void setup_environment_from_cmdline(const cmdline_t *cmd) {
             *key_end = '\0';
             *val_end = '\0';
             setenv(key_start, val_start, 1);
+            LOG_BOOT("Set env: %s=%s", key_start, val_start);
             env_count++;
         }
 
