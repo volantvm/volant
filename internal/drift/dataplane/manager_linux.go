@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"sync"
 
 	"github.com/cilium/ebpf"
@@ -54,8 +53,43 @@ func newManager(opts Options) (Interface, error) {
 		return nil, fmt.Errorf("dataplane: load ingress collection: %w", err)
 	}
 
-	// Load egress collection
-	egressColl, err := ebpf.LoadCollection(egressPath)
+	// Get shared maps from ingress collection BEFORE loading egress
+	portmap, ok := ingressColl.Maps["portmap"]
+	if !ok {
+		ingressColl.Close()
+		return nil, errors.New("dataplane: portmap not found")
+	}
+
+	conntrack, ok := ingressColl.Maps["conntrack"]
+	if !ok {
+		ingressColl.Close()
+		return nil, errors.New("dataplane: conntrack not found")
+	}
+
+	stats, ok := ingressColl.Maps["stats"]
+	if !ok {
+		ingressColl.Close()
+		return nil, errors.New("dataplane: stats not found")
+	}
+
+	// Load egress as spec so we can rewrite maps to share with ingress
+	egressSpec, err := ebpf.LoadCollectionSpec(egressPath)
+	if err != nil {
+		ingressColl.Close()
+		return nil, fmt.Errorf("dataplane: load egress spec: %w", err)
+	}
+
+	// Rewrite egress spec to use ingress maps (CRITICAL for map sharing!)
+	if err := egressSpec.RewriteMaps(map[string]*ebpf.Map{
+		"conntrack": conntrack,
+		"stats":     stats,
+	}); err != nil {
+		ingressColl.Close()
+		return nil, fmt.Errorf("dataplane: rewrite egress maps: %w", err)
+	}
+
+	// Now load egress collection with shared maps
+	egressColl, err := ebpf.NewCollectionWithOptions(egressSpec, ebpf.CollectionOptions{})
 	if err != nil {
 		ingressColl.Close()
 		return nil, fmt.Errorf("dataplane: load egress collection: %w", err)
@@ -75,41 +109,6 @@ func newManager(opts Options) (Interface, error) {
 		ingressColl.Close()
 		egressColl.Close()
 		return nil, errors.New("dataplane: program drift_l4_egress not found in egress collection")
-	}
-
-	// Get shared maps from ingress collection (ingress creates them)
-	portmap, ok := ingressColl.Maps["portmap"]
-	if !ok {
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, errors.New("dataplane: portmap not found")
-	}
-
-	conntrack, ok := ingressColl.Maps["conntrack"]
-	if !ok {
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, errors.New("dataplane: conntrack not found")
-	}
-
-	stats, ok := ingressColl.Maps["stats"]
-	if !ok {
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, errors.New("dataplane: stats not found")
-	}
-
-	// Pin shared maps and update egress collection to use them
-	if err := pinAndReuseMap(conntrack, egressColl, "conntrack"); err != nil {
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, fmt.Errorf("dataplane: reuse conntrack map: %w", err)
-	}
-
-	if err := pinAndReuseMap(stats, egressColl, "stats"); err != nil {
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, fmt.Errorf("dataplane: reuse stats map: %w", err)
 	}
 
 	// Determine external interface for TC ingress attachment
@@ -139,18 +138,10 @@ func newManager(opts Options) (Interface, error) {
 
 	opts.Logger.Info("drift dataplane TC ingress attached", "interface", extIface)
 
-	// Attach TC egress to bridge
-	brIfaceObj, err := net.InterfaceByName(opts.Interface)
-	if err != nil {
-		ingressLink.Close()
-		ingressColl.Close()
-		egressColl.Close()
-		return nil, fmt.Errorf("dataplane: lookup bridge interface %s: %w", opts.Interface, err)
-	}
-
+	// Attach TC egress to external interface (not bridge - forwarded packets bypass bridge TC)
 	egressLink, err := link.AttachTCX(link.TCXOptions{
 		Program:   egressProg,
-		Interface: brIfaceObj.Index,
+		Interface: extIfaceObj.Index,
 		Attach:    ebpf.AttachTCXEgress,
 	})
 	if err != nil {
@@ -160,7 +151,7 @@ func newManager(opts Options) (Interface, error) {
 		return nil, fmt.Errorf("dataplane: attach tc egress: %w", err)
 	}
 
-	opts.Logger.Info("drift dataplane TC egress attached", "interface", opts.Interface)
+	opts.Logger.Info("drift dataplane TC egress attached", "interface", extIface)
 
 	return &manager{
 		logger:         opts.Logger.With("component", "dataplane"),
@@ -176,34 +167,6 @@ func newManager(opts Options) (Interface, error) {
 		ingressColl:    ingressColl,
 		egressColl:     egressColl,
 	}, nil
-}
-
-// pinAndReuseMap pins a map from one collection and updates another collection to use it
-func pinAndReuseMap(m *ebpf.Map, destColl *ebpf.Collection, name string) error {
-	pinPath := fmt.Sprintf("/sys/fs/bpf/drift_%s", name)
-
-	// Pin the map
-	if err := m.Pin(pinPath); err != nil {
-		// If already exists, that's fine
-		if !errors.Is(err, os.ErrExist) {
-			return err
-		}
-	}
-
-	// Update destination collection's map to point to the pinned map
-	destMap, ok := destColl.Maps[name]
-	if ok {
-		destMap.Close()
-	}
-
-	// Load pinned map
-	pinnedMap, err := ebpf.LoadPinnedMap(pinPath, nil)
-	if err != nil {
-		return err
-	}
-
-	destColl.Maps[name] = pinnedMap
-	return nil
 }
 
 func (m *manager) ApplyBridge(_ context.Context, proto uint8, hostPort uint16, destIP net.IP, destPort uint16) error {
