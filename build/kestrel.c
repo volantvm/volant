@@ -88,6 +88,7 @@ typedef struct {
     manifest_t *manifest;
     pid_t workload_pid;
     int workload_restart_count;
+    pid_t getty_pid;
     time_t start_time;
     int api_socket;
     int should_exit;
@@ -888,6 +889,22 @@ static void start_workload(manifest_t *manifest) {
     LOG("Workload started (pid=%d)", pid);
 }
 
+static void spawn_getty(void) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child: exec getty
+        setsid(); // Create new session
+        execl("/sbin/getty", "getty", "-L", "ttyS0", "115200", "vt100", NULL);
+        // If getty doesn't exist, try agetty
+        execl("/sbin/agetty", "agetty", "-L", "ttyS0", "115200", "vt100", NULL);
+        // If that fails, just exec a shell
+        execl("/bin/sh", "sh", NULL);
+        _exit(1);
+    } else if (pid > 0) {
+        g_state.getty_pid = pid;
+    }
+}
+
 static void reap_children(void) {
     int status;
     pid_t pid;
@@ -907,6 +924,10 @@ static void reap_children(void) {
             } else {
                 LOG("Workload restart limit reached or no manifest");
             }
+        } else if (pid == g_state.getty_pid) {
+            // Getty exited (user logged out), respawn it
+            g_state.getty_pid = 0;
+            spawn_getty();
         }
     }
 }
@@ -1061,6 +1082,9 @@ int main(int argc, char *argv[]) {
     if (g_state.api_socket < 0) {
         LOG("Warning: API server failed to start");
     }
+
+    // Phase 8: Start getty on serial console for debugging
+    spawn_getty();
 
     // Setup signal handlers
     setup_signal_handlers();
