@@ -892,13 +892,27 @@ static void start_workload(manifest_t *manifest) {
 static void spawn_getty(void) {
     pid_t pid = fork();
     if (pid == 0) {
-        // Child: exec getty
+        // Child: spawn shell directly on serial console (no login required)
         setsid(); // Create new session
-        execl("/sbin/getty", "getty", "-L", "ttyS0", "115200", "vt100", NULL);
-        // If getty doesn't exist, try agetty
-        execl("/sbin/agetty", "agetty", "-L", "ttyS0", "115200", "vt100", NULL);
-        // If that fails, just exec a shell
-        execl("/bin/sh", "sh", NULL);
+
+        // Open ttyS0 for stdin/stdout/stderr
+        int fd = open("/dev/ttyS0", O_RDWR);
+        if (fd >= 0) {
+            dup2(fd, 0);
+            dup2(fd, 1);
+            dup2(fd, 2);
+            if (fd > 2) close(fd);
+        }
+
+        // Set environment
+        setenv("TERM", "vt100", 1);
+        setenv("HOME", "/root", 1);
+        setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+
+        // Exec shell
+        execl("/bin/sh", "-sh", NULL);
+        execl("/bin/ash", "-ash", NULL);
+        execl("/bin/bash", "-bash", NULL);
         _exit(1);
     } else if (pid > 0) {
         g_state.getty_pid = pid;
