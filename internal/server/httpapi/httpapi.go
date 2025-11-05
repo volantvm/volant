@@ -28,6 +28,7 @@ import (
 
 	"github.com/volantvm/volant/internal/drift/routes"
 	"github.com/volantvm/volant/internal/imagespec"
+	"github.com/volantvm/volant/internal/metrics"
 	"github.com/volantvm/volant/internal/server/db"
 	"github.com/volantvm/volant/internal/server/devicemanager"
 	"github.com/volantvm/volant/internal/server/driftclient"
@@ -61,10 +62,21 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, imag
 	r.Use(gin.Recovery())
 	r.Use(requestLogger(logger))
 
-	// CORS (optional, for browser-based UI)
-	if raw := os.Getenv("VOLANT_CORS_ORIGINS"); raw != "" {
-		origins := strings.Split(raw, ",")
+	// CORS enabled by default for browser-based UI
+	// Set VOLANT_CORS_ORIGINS to specific origins to restrict access
+	// Set VOLANT_CORS_ORIGINS to "none" to disable CORS
+	corsOrigins := os.Getenv("VOLANT_CORS_ORIGINS")
+	if corsOrigins == "" {
+		// Default: Allow all origins for ease of use
+		r.Use(corsMiddleware(logger, []string{"*"}))
+		logger.Info("CORS enabled with default settings (allow all origins)")
+	} else if corsOrigins != "none" && corsOrigins != "disabled" {
+		// Custom origins specified
+		origins := strings.Split(corsOrigins, ",")
 		r.Use(corsMiddleware(logger, origins))
+		logger.Info("CORS enabled with custom origins", "origins", origins)
+	} else {
+		logger.Info("CORS disabled")
 	}
 
 	if cidr := os.Getenv("VOLANT_API_ALLOW_CIDR"); cidr != "" {
@@ -80,14 +92,19 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, imag
 		logger.Warn("load stored images", "error", err)
 	}
 
+	// Initialize metrics collector
+	collector := metrics.NewCollector(3600) // Store up to 3600 data points (1 hour at 1s interval)
+	collector.StartCollection(1 * time.Second)
+
 	api := &apiServer{
-		logger:      logger,
-		engine:      engine,
-		bus:         bus,
-		agentPort:   agentDefaultPort,
-		agentClient: &http.Client{Timeout: 120 * time.Second},
-		images:      images,
-		drift:       drift,
+		logger:           logger,
+		engine:           engine,
+		bus:              bus,
+		agentPort:        agentDefaultPort,
+		agentClient:      &http.Client{Timeout: 120 * time.Second},
+		images:           images,
+		drift:            drift,
+		metricsCollector: collector,
 	}
 
 	r.GET("/healthz", func(c *gin.Context) {
@@ -170,6 +187,21 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, imag
 			driftRoutes.POST("", api.upsertDriftRoute)
 			driftRoutes.DELETE(":protocol/:port", api.deleteDriftRoute)
 		}
+
+		metricsGroup := v1.Group("/metrics")
+		{
+			metricsGroup.GET("/system", api.getSystemMetrics)
+			metricsGroup.GET("/timeseries", api.getTimeSeriesMetrics)
+		}
+
+		drift := v1.Group("/drift")
+		{
+			drift.GET("/metrics", api.getDriftMetrics)
+			drift.GET("/healthz", api.getDriftHealth)
+		}
+
+		// Add VM metrics endpoint to existing vms group
+		vms.GET(":name/metrics", api.getVMMetrics)
 	}
 
 	r.GET("/ws/v1/vms/:name/devtools/*path", api.vmDevToolsWebSocket)
@@ -315,9 +347,10 @@ func corsMiddleware(logger *slog.Logger, allowed []string) gin.HandlerFunc {
 				c.Header("Access-Control-Allow-Origin", allowedOrigin)
 				c.Header("Vary", "Origin")
 				c.Header("Access-Control-Allow-Credentials", "true")
-				c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-				c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Volant-API-Key")
-				c.Header("Access-Control-Expose-Headers", "Content-Type, X-Total-Count")
+				c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, PUT, OPTIONS")
+				c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Volant-API-Key, Accept, Origin")
+				c.Header("Access-Control-Expose-Headers", "Content-Type, X-Total-Count, X-Request-Id")
+				c.Header("Access-Control-Max-Age", "86400") // Cache preflight for 24 hours
 			}
 		}
 		if c.Request.Method == http.MethodOptions {
@@ -330,13 +363,14 @@ func corsMiddleware(logger *slog.Logger, allowed []string) gin.HandlerFunc {
 }
 
 type apiServer struct {
-	logger      *slog.Logger
-	engine      orchestrator.Engine
-	bus         eventbus.Bus
-	images      *images.Registry
-	agentPort   int
-	agentClient *http.Client
-	drift       *driftclient.Client
+	logger           *slog.Logger
+	engine           orchestrator.Engine
+	bus              eventbus.Bus
+	images           *images.Registry
+	agentPort        int
+	agentClient      *http.Client
+	drift            *driftclient.Client
+	metricsCollector *metrics.Collector
 }
 
 type navigateActionRequest struct {
