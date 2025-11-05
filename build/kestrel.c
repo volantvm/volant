@@ -177,10 +177,18 @@ static void mount_essential_filesystems(void) {
     }
 
     // Create /dev/fd and standard stream symlinks for process substitution
-    symlink("/proc/self/fd", "/dev/fd");
-    symlink("/proc/self/fd/0", "/dev/stdin");
-    symlink("/proc/self/fd/1", "/dev/stdout");
-    symlink("/proc/self/fd/2", "/dev/stderr");
+    if (symlink("/proc/self/fd", "/dev/fd") && errno != EEXIST) {
+        // Non-fatal, but log if verbose
+    }
+    if (symlink("/proc/self/fd/0", "/dev/stdin") && errno != EEXIST) {
+        // Non-fatal
+    }
+    if (symlink("/proc/self/fd/1", "/dev/stdout") && errno != EEXIST) {
+        // Non-fatal
+    }
+    if (symlink("/proc/self/fd/2", "/dev/stderr") && errno != EEXIST) {
+        // Non-fatal
+    }
 }
 
 // ============================================================================
