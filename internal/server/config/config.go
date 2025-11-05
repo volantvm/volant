@@ -28,6 +28,7 @@ const (
 	defaultDriftEndpoint = ""
 	defaultDNSListen     = "192.168.127.1:53"
 	defaultDNSDomain     = "volant"
+	defaultDNSUpstreams  = "1.1.1.1:53,8.8.8.8:53"
 )
 
 // ServerConfig captures the runtime configuration required by the daemon.
@@ -48,11 +49,24 @@ type ServerConfig struct {
 	DNSEnabled       bool
 	DNSListen        string
 	DNSDomain        string
+	DNSUpstreams     []string // Upstream DNS servers for external queries
 }
 
 // FromEnv loads server configuration from environment variables, applying
 // opinionated defaults when unset.
 func FromEnv() (ServerConfig, error) {
+	// Parse upstream DNS servers
+	upstreamsStr := getenv("VOLANT_DNS_UPSTREAMS", defaultDNSUpstreams)
+	var upstreams []string
+	if upstreamsStr != "" {
+		for _, upstream := range strings.Split(upstreamsStr, ",") {
+			upstream = strings.TrimSpace(upstream)
+			if upstream != "" {
+				upstreams = append(upstreams, upstream)
+			}
+		}
+	}
+
 	cfg := ServerConfig{
 		DatabasePath:     getenv("VOLANT_DB_PATH", defaultDBPath),
 		APIListenAddr:    getenv("VOLANT_API_LISTEN", defaultAPIListenAddr),
@@ -68,6 +82,7 @@ func FromEnv() (ServerConfig, error) {
 		DNSEnabled:       getenv("VOLANT_DNS_ENABLED", "true") != "false",
 		DNSListen:        getenv("VOLANT_DNS_LISTEN", defaultDNSListen),
 		DNSDomain:        getenv("VOLANT_DNS_DOMAIN", defaultDNSDomain),
+		DNSUpstreams:     upstreams,
 	}
 
 	if cfg.DriftEndpoint == "" {
