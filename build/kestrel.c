@@ -270,6 +270,10 @@ static void parse_cmdline(cmdline_t *cmd) {
     }
 
     LOG_BOOT("Parsed %d kernel cmdline parameters", cmd->count);
+    for (int i = 0; i < cmd->count; i++) {
+        LOG_BOOT("  param[%d]: key='%s' value='%s'", i, cmd->params[i].key,
+                 cmd->params[i].value ? cmd->params[i].value : "(null)");
+    }
 }
 
 static const char* cmdline_get(const cmdline_t *cmd, const char *key) {
