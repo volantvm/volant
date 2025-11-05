@@ -52,8 +52,7 @@ func New(store db.Store, listen, domain string, upstreams []string, logger *slog
 // Start launches the DNS server and blocks until context is cancelled.
 func (s *Server) Start(ctx context.Context) error {
 	mux := dns.NewServeMux()
-	mux.HandleFunc(s.domain+".", s.handleQuery)
-	mux.HandleFunc(".", s.handleQuery) // Catch-all for short names
+	mux.HandleFunc(".", s.handleQuery) // Catch-all handler for all queries
 
 	s.server = &dns.Server{
 		Addr:    s.listen,
