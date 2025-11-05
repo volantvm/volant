@@ -446,7 +446,7 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 				if err != nil {
 					return fmt.Errorf("marshal env: %w", err)
 				}
-				envEncoded := base64.StdEncoding.EncodeToString(envJSON)
+				envEncoded := base64.RawURLEncoding.EncodeToString(envJSON)
 				cmdlineArgs["volant.env"] = envEncoded
 				e.logger.Info("encoded env vars", "vm", req.Name, "count", len(envMap))
 			}
