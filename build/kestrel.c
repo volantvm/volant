@@ -1036,10 +1036,12 @@ int main(int argc, char *argv[]) {
 
     // Phase 3: Setup environment
     setup_environment_from_cmdline(&g_state.cmdline);
-    setup_dns_from_cmdline(&g_state.cmdline);
 
     // Phase 4: Mount rootfs
     bootstrap_rootfs(&g_state.cmdline);
+
+    // Phase 4b: Setup DNS after rootfs is mounted
+    setup_dns_from_cmdline(&g_state.cmdline);
 
     // Phase 5: Resolve manifest
     LOG("Resolving workload manifest");
