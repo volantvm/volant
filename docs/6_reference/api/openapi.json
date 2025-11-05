@@ -404,6 +404,65 @@
         },
         "type": "object"
       },
+      "DriftRoute": {
+        "properties": {
+          "host_port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Host port to expose"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": ["tcp", "udp"],
+            "description": "Protocol (tcp or udp)"
+          },
+          "backend": {
+            "$ref": "#/components/schemas/DriftBackend"
+          }
+        },
+        "required": ["host_port", "protocol", "backend"],
+        "type": "object"
+      },
+      "DriftBackend": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["bridge", "vsock"],
+            "description": "Backend type (bridge for IP networking, vsock for virtio-vsock)"
+          },
+          "ip": {
+            "type": "string",
+            "description": "Backend IP address (required for bridge type)"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Backend port"
+          },
+          "cid": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Context ID (required for vsock type)"
+          }
+        },
+        "required": ["type", "port"],
+        "type": "object"
+      },
+      "DriftStats": {
+        "properties": {
+          "packets": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total packets processed"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total bytes processed"
+          }
+        },
+        "type": "object"
+      },
       "imageSummary": {
         "properties": {
           "enabled": {
@@ -3067,6 +3126,210 @@
         "tags": [
           "vm",
           "console"
+        ]
+      }
+    },
+    "/drift/healthz": {
+      "get": {
+        "operationId": "getDriftHealth",
+        "responses": {
+          "200": {
+            "description": "Drift service is healthy"
+          },
+          "default": {
+            "description": ""
+          }
+        },
+        "summary": "Drift health check",
+        "tags": [
+          "drift",
+          "health"
+        ]
+      }
+    },
+    "/drift/metrics": {
+      "get": {
+        "operationId": "getDriftMetrics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftStats"
+                }
+              }
+            },
+            "description": "Dataplane statistics"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          },
+          "default": {
+            "description": ""
+          }
+        },
+        "summary": "Get dataplane metrics",
+        "tags": [
+          "drift",
+          "metrics"
+        ]
+      }
+    },
+    "/drift/routes": {
+      "get": {
+        "operationId": "listDriftRoutes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DriftRoute"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of routes"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "default": {
+            "description": ""
+          }
+        },
+        "summary": "List all L4 load balancer routes",
+        "tags": [
+          "drift",
+          "networking"
+        ]
+      },
+      "post": {
+        "operationId": "upsertDriftRoute",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriftRoute"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftRoute"
+                }
+              }
+            },
+            "description": "Route created/updated"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          },
+          "default": {
+            "description": ""
+          }
+        },
+        "summary": "Create or update a route",
+        "tags": [
+          "drift",
+          "networking"
+        ]
+      }
+    },
+    "/drift/routes/{protocol}/{port}": {
+      "delete": {
+        "operationId": "deleteDriftRoute",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "protocol",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tcp", "udp"]
+            },
+            "description": "Protocol (tcp or udp)"
+          },
+          {
+            "in": "path",
+            "name": "port",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "Host port"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Route deleted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Route not found"
+          },
+          "default": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a route",
+        "tags": [
+          "drift",
+          "networking"
         ]
       }
     }
