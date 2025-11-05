@@ -432,9 +432,38 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 			return fmt.Errorf("allocate vsock cid: %w", err)
 		}
 
+		// Build kernel cmdline args with env vars, DNS, etc.
+		cmdlineArgs := map[string]string{}
+
+		// Add DNS configuration
+		cmdlineArgs["volant.dns_server"] = e.hostIP.String()
+		cmdlineArgs["volant.dns_search"] = "volant"
+
+		// Encode environment variables
+		if envData, ok := configToStore.Metadata["env"]; ok && envData != nil {
+			if envMap, ok := envData.(map[string]string); ok && len(envMap) > 0 {
+				envJSON, err := json.Marshal(envMap)
+				if err != nil {
+					return fmt.Errorf("marshal env: %w", err)
+				}
+				envEncoded := base64.StdEncoding.EncodeToString(envJSON)
+				cmdlineArgs["volant.env"] = envEncoded
+				e.logger.Info("encoded env vars", "vm", req.Name, "count", len(envMap))
+			}
+		}
+
+		// Encode manifest
+		if req.Manifest != nil {
+			encodedManifest, err := imagespec.Encode(*req.Manifest)
+			if err != nil {
+				return fmt.Errorf("encode manifest: %w", err)
+			}
+			cmdlineArgs[imagespec.CmdlineKey] = encodedManifest
+		}
+
 		mac := deriveMAC(req.Name, ipAddress)
 		baseCmdline := buildKernelCmdline(ipAddress, e.hostIP.String(), netmask, hostname, req.KernelCmdlineHint)
-		fullCmdline := appendKernelArgs(baseCmdline, map[string]string{})
+		fullCmdline := appendKernelArgs(baseCmdline, cmdlineArgs)
 
 		vm := &db.VM{
 			Name:          req.Name,
@@ -589,6 +618,8 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		spec.SeedDisk = seedDisk
 	}
 
+	// Note: DNS, env, and manifest are already encoded in vmRecord.KernelCmdline during VM creation
+	// spec.Args is for launcher metadata (not kernel cmdline)
 	cmdArgs := map[string]string{
 		imagespec.RuntimeKey: req.Runtime,
 		imagespec.APIHostKey: apiHost,
@@ -597,40 +628,6 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	if imageName != "" {
 		cmdArgs[imagespec.ImageKey] = imageName
 	}
-
-	// Add DNS configuration for service discovery
-	// DNS server is volantd running on the host (192.168.127.1:53)
-	cmdArgs["volant.dns_server"] = e.hostIP.String()
-	cmdArgs["volant.dns_search"] = "volant"
-	if req.Manifest != nil {
-		encodedManifest, err := imagespec.Encode(*req.Manifest)
-		if err != nil {
-			e.logger.Error("encode manifest", "vm", req.Name, "error", err)
-			return nil, fmt.Errorf("orchestrator: encode manifest: %w", err)
-		}
-		cmdArgs[imagespec.CmdlineKey] = encodedManifest
-	}
-
-	// Encode environment variables into kernel cmdline
-	if envData, ok := configToStore.Metadata["env"]; ok && envData != nil {
-		if envMap, ok := envData.(map[string]string); ok && len(envMap) > 0 {
-			envJSON, err := json.Marshal(envMap)
-			if err != nil {
-				e.logger.Error("marshal env", "vm", req.Name, "error", err)
-				if seedDisk != nil {
-					_ = os.Remove(seedDisk.Path)
-				}
-				_ = e.network.CleanupTap(ctx, tapName)
-				e.rollbackCreate(ctx, vmRecord)
-				return nil, fmt.Errorf("orchestrator: marshal env: %w", err)
-			}
-			envEncoded := base64.StdEncoding.EncodeToString(envJSON)
-			cmdArgs["volant.env"] = envEncoded
-			e.logger.Info("encoded env vars", "vm", req.Name, "count", len(envMap))
-		}
-	}
-
-	spec.Args = cmdArgs
 
 	if req.Manifest != nil {
 		// Start from manifest defaults; allow both initramfs and rootfs when provided
@@ -739,6 +736,8 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		spec.VFIODevicePaths = vfioPaths
 		e.logger.Info("vfio devices bound", "vm", req.Name, "paths", vfioPaths)
 	}
+
+	spec.Args = cmdArgs
 
 	e.logger.Info("launch kernel cmdline", "vm", req.Name, "cmdline", spec.KernelCmdline)
 
