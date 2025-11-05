@@ -59,7 +59,7 @@ Volant provides:
 - **`volantd`** — Control plane (SQLite registry + VM orchestration)
 - **`volar`** — CLI for managing VMs and images
 - **`kestrel`** — In-guest agent & init (PID 1)
-
+- **`driftd`** — L4 load balancer with eBPF dataplane (TC-based NAT/port forwarding)
 - **[`fledge`](https://github.com/volantvm/fledge)** — Image builder (OCI images → bootable artifacts)
 
 **Two paths, same workflow**:
@@ -78,7 +78,7 @@ Spin up your first microVM in under a minute.
 ### 1. Install the Volant toolchain
 ```bash
 # This installs volar (CLI), volantd (control plane), kestrel (guest agent),
-# and default kernels to /var/lib/volant/kernel.
+# driftd (L4 load balancer), and default kernels to /var/lib/volant/kernel.
 # By default, setup creates a bridge (vbr0) at 192.168.127.1/24.
 
 curl -fsSL https://get.volantvm.com | bash
@@ -187,28 +187,36 @@ Use **[fledge](https://github.com/volantvm/fledge)** to build custom images from
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│              Host Machine               │
-│  ┌───────────────────────────────────┐  │
-│  │    volantd (Control Plane)        │  │
-│  │  • SQLite registry                │  │
-│  │  • IPAM (192.168.127.0/24)        │  │
-│  │  • Cloud Hypervisor orchestration │  │
-│  │  • REST + MCP APIs                │  │
-│  └───────────────┬───────────────────┘  │
-│                  │                       │
-│  ┌───────────────▼───────────────────┐  │
-│  │     Bridge Network (vbr0)         │  │
-│  └┬────────┬────────┬────────┬───────┘  │
-│   │        │        │        │           │
-│  ┌▼──┐   ┌▼──┐   ┌▼──┐   ┌▼──┐         │
-│  │VM1│   │VM2│   │VM3│   │VMN│         │
-│  │┌──┐   │┌──┐   │┌──┐   │┌──┐         │
-│  ││   │││   │││   │││         │
-│  │└──┘   │└──┘   │└──┘   │└──┘         │
-│  └───┘   └───┘   └───┘   └───┘         │
-│   kestrel agents (PID 1)                │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                   Host Machine                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │         volantd (Control Plane)              │   │
+│  │  • SQLite registry                           │   │
+│  │  • IPAM (192.168.127.0/24)                   │   │
+│  │  • Cloud Hypervisor orchestration            │   │
+│  │  • REST + MCP APIs                           │   │
+│  └─────────────────┬────────────────────────────┘   │
+│                    │                                 │
+│  ┌─────────────────┴────────────────────────────┐   │
+│  │    driftd (L4 Load Balancer / NAT)           │   │
+│  │  • eBPF TC ingress/egress programs           │   │
+│  │  • Port forwarding (host → VM)               │   │
+│  │  • Stateful connection tracking              │   │
+│  │  • Auto-detect external interface            │   │
+│  └─────────────────┬────────────────────────────┘   │
+│                    │                                 │
+│  ┌─────────────────▼────────────────────────────┐   │
+│  │          Bridge Network (vbr0)               │   │
+│  └┬────────┬────────┬────────┬──────────────────┘   │
+│   │        │        │        │                       │
+│  ┌▼──┐   ┌▼──┐   ┌▼──┐   ┌▼──┐                     │
+│  │VM1│   │VM2│   │VM3│   │VMN│                     │
+│  │┌──┐   │┌──┐   │┌──┐   │┌──┐                     │
+│  ││🔒│   ││🔒│   ││🔒│   ││🔒│                     │
+│  │└──┘   │└──┘   │└──┘   │└──┘                     │
+│  └───┘   └───┘   └───┘   └───┘                     │
+│   kestrel agents (PID 1)                            │
+└─────────────────────────────────────────────────────┘
 ```
 
 **Kernel and boot**:
