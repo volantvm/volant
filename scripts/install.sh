@@ -226,7 +226,7 @@ resolve_version() {
 
 download_and_install_artifacts() {
   local base_url="https://github.com/${REPO}/releases/latest/download/"
-  local artifacts=("volar" "kestrel" "volantd" "driftd" "drift_l4.bpf.o" "bzImage" "vmlinux" "checksums.txt")
+  local artifacts=("volar" "kestrel" "volantd" "driftd" "drift_l4_ingress.bpf.o" "drift_l4_egress.bpf.o" "bzImage" "vmlinux" "checksums.txt")
 
   log_info "Downloading volant artifacts..."
   for artifact in "${artifacts[@]}"; do
@@ -254,8 +254,11 @@ download_and_install_artifacts() {
   if [[ -f "${TMP_DIR}/driftd" ]]; then
     sudo install -m 0755 "${TMP_DIR}/driftd" /usr/local/bin/driftd
   fi
-  if [[ -f "${TMP_DIR}/drift_l4.bpf.o" ]]; then
-    sudo install -m 0644 "${TMP_DIR}/drift_l4.bpf.o" /usr/local/bin/drift_l4.bpf.o
+  if [[ -f "${TMP_DIR}/drift_l4_ingress.bpf.o" ]]; then
+    sudo install -m 0644 "${TMP_DIR}/drift_l4_ingress.bpf.o" /usr/local/bin/drift_l4_ingress.bpf.o
+  fi
+  if [[ -f "${TMP_DIR}/drift_l4_egress.bpf.o" ]]; then
+    sudo install -m 0644 "${TMP_DIR}/drift_l4_egress.bpf.o" /usr/local/bin/drift_l4_egress.bpf.o
   fi
 
   log_info "Installing kernel files to ${KERNEL_DIR}..."

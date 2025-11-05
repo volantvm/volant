@@ -49,18 +49,27 @@ jobs:
             clang llvm
           sudo update-ca-certificates
 
-      - name: Build Drift eBPF Object
+      - name: Build Drift eBPF Objects
         run: |
           sudo apt-get install -y linux-headers-$(uname -r) libbpf-dev
           mkdir -p internal/drift/bpf/bin
           # Generate vmlinux.h with all kernel definitions
           bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/drift/bpf/vmlinux.h
+          # Build ingress program
           clang -O2 -g -target bpf -D__TARGET_ARCH_x86 \
             -I internal/drift/bpf \
             -I/usr/lib/x86_64-linux-gnu \
-            -c internal/drift/bpf/drift_l4.c -o internal/drift/bpf/bin/drift_l4.bpf.o
-          llvm-strip -g internal/drift/bpf/bin/drift_l4.bpf.o
-          cp internal/drift/bpf/bin/drift_l4.bpf.o bin/drift_l4.bpf.o
+            -c internal/drift/bpf/drift_l4_ingress.c -o internal/drift/bpf/bin/drift_l4_ingress.bpf.o
+          llvm-strip -g internal/drift/bpf/bin/drift_l4_ingress.bpf.o
+          # Build egress program
+          clang -O2 -g -target bpf -D__TARGET_ARCH_x86 \
+            -I internal/drift/bpf \
+            -I/usr/lib/x86_64-linux-gnu \
+            -c internal/drift/bpf/drift_l4_egress.c -o internal/drift/bpf/bin/drift_l4_egress.bpf.o
+          llvm-strip -g internal/drift/bpf/bin/drift_l4_egress.bpf.o
+          # Copy to bin directory for release
+          cp internal/drift/bpf/bin/drift_l4_ingress.bpf.o bin/drift_l4_ingress.bpf.o
+          cp internal/drift/bpf/bin/drift_l4_egress.bpf.o bin/drift_l4_egress.bpf.o
 
       - name: Build init (static, deterministic)
         run: |
@@ -139,7 +148,7 @@ jobs:
 
       - name: Generate Checksums For All Artifacts
         run: |
-          (cd bin && sha256sum volar kestrel volantd driftd drift_l4.bpf.o) > checksums.txt
+          (cd bin && sha256sum volar kestrel volantd driftd drift_l4_ingress.bpf.o drift_l4_egress.bpf.o) > checksums.txt
           (cd ${{ env.OUT_DIR }} && sha256sum bzImage vmlinux) >> checksums.txt
 
       - name: Generate build provenance for all artifacts
@@ -151,7 +160,8 @@ jobs:
             bin/kestrel
             bin/volantd
             bin/driftd
-            bin/drift_l4.bpf.o
+            bin/drift_l4_ingress.bpf.o
+            bin/drift_l4_egress.bpf.o
             ${{ env.OUT_DIR }}/bzImage
             ${{ env.OUT_DIR }}/bzImage.sha256
             ${{ env.OUT_DIR }}/vmlinux
@@ -170,7 +180,8 @@ jobs:
             bin/kestrel
             bin/volantd
             bin/driftd
-            bin/drift_l4.bpf.o
+            bin/drift_l4_ingress.bpf.o
+            bin/drift_l4_egress.bpf.o
             ${{ env.OUT_DIR }}/bzImage
             ${{ env.OUT_DIR }}/bzImage.sha256
             ${{ env.OUT_DIR }}/vmlinux
