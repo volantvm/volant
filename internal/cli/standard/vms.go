@@ -288,6 +288,14 @@ func newVMsCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			exposeFlags, err := cmd.Flags().GetStringSlice("expose")
+			if err != nil {
+				return err
+			}
+			noExposeFlag, err := cmd.Flags().GetBool("no-expose")
+			if err != nil {
+				return err
+			}
 
 			// Build Overrides struct
 			var overrides vmconfig.Overrides
@@ -311,7 +319,7 @@ func newVMsCreateCmd() *cobra.Command {
 				}
 			}
 
-			// Parse port exposures from PORT or HOST_PORT:CONTAINER_PORT format
+			// Parse port exposures from PORT or HOST_PORT:CONTAINER_PORT format (legacy flag)
 			if len(portFlags) > 0 {
 				overrides.ExposePorts = make([]vmconfig.Expose, 0, len(portFlags))
 				for _, p := range portFlags {
@@ -339,6 +347,90 @@ func newVMsCreateCmd() *cobra.Command {
 					expose.Protocol = "tcp" // default to TCP
 					overrides.ExposePorts = append(overrides.ExposePorts, expose)
 				}
+			}
+
+			// Parse Docker-style port exposures: [HOST_PORT:]CONTAINER_PORT[:PROTOCOL]
+			// Examples: 8080:3000:tcp, 8080:3000, 3000:tcp, 3000
+			if len(exposeFlags) > 0 {
+				if len(portFlags) > 0 {
+					return fmt.Errorf("cannot use both --port and --expose flags together")
+				}
+				overrides.ExposePorts = make([]vmconfig.Expose, 0, len(exposeFlags))
+				for _, e := range exposeFlags {
+					var expose vmconfig.Expose
+					expose.Protocol = "tcp" // default protocol
+
+					parts := strings.Split(e, ":")
+					switch len(parts) {
+					case 1:
+						// Format: CONTAINER_PORT (auto-assign host port)
+						containerPort, err := strconv.Atoi(parts[0])
+						if err != nil {
+							return fmt.Errorf("invalid port in %q: %w", e, err)
+						}
+						expose.Port = containerPort
+						expose.HostPort = 0 // Auto-assign
+
+					case 2:
+						// Could be: HOST_PORT:CONTAINER_PORT or CONTAINER_PORT:PROTOCOL
+						// Try to parse second part as protocol first
+						protocol := strings.ToLower(parts[1])
+						if protocol == "tcp" || protocol == "udp" {
+							// Format: CONTAINER_PORT:PROTOCOL
+							containerPort, err := strconv.Atoi(parts[0])
+							if err != nil {
+								return fmt.Errorf("invalid port in %q: %w", e, err)
+							}
+							expose.Port = containerPort
+							expose.Protocol = protocol
+							expose.HostPort = 0 // Auto-assign
+						} else {
+							// Format: HOST_PORT:CONTAINER_PORT
+							hostPort, err := strconv.Atoi(parts[0])
+							if err != nil {
+								return fmt.Errorf("invalid host port in %q: %w", e, err)
+							}
+							containerPort, err := strconv.Atoi(parts[1])
+							if err != nil {
+								return fmt.Errorf("invalid container port in %q: %w", e, err)
+							}
+							expose.HostPort = hostPort
+							expose.Port = containerPort
+						}
+
+					case 3:
+						// Format: HOST_PORT:CONTAINER_PORT:PROTOCOL
+						hostPort, err := strconv.Atoi(parts[0])
+						if err != nil {
+							return fmt.Errorf("invalid host port in %q: %w", e, err)
+						}
+						containerPort, err := strconv.Atoi(parts[1])
+						if err != nil {
+							return fmt.Errorf("invalid container port in %q: %w", e, err)
+						}
+						protocol := strings.ToLower(parts[2])
+						if protocol != "tcp" && protocol != "udp" {
+							return fmt.Errorf("invalid protocol in %q: must be tcp or udp", e)
+						}
+						expose.HostPort = hostPort
+						expose.Port = containerPort
+						expose.Protocol = protocol
+
+					default:
+						return fmt.Errorf("invalid expose format %q: expected [HOST_PORT:]CONTAINER_PORT[:PROTOCOL]", e)
+					}
+
+					overrides.ExposePorts = append(overrides.ExposePorts, expose)
+				}
+			}
+
+			// Handle --no-expose flag: explicitly disable all port exposure (secure by default)
+			if noExposeFlag {
+				if len(portFlags) > 0 || len(exposeFlags) > 0 {
+					return fmt.Errorf("cannot use --no-expose with --port or --expose flags")
+				}
+				// Set to empty slice to override manifest ports
+				overrides.ExposePorts = []vmconfig.Expose{}
 			}
 
 			req := client.CreateVMRequest{
@@ -439,7 +531,9 @@ func newVMsCreateCmd() *cobra.Command {
 	cmd.Flags().Int("cpu", 0, "Number of virtual CPU cores (overrides manifest default)")
 	cmd.Flags().Int("memory", 0, "Memory in MB (overrides manifest default)")
 	cmd.Flags().StringSlice("env", nil, "Environment variables in KEY=VALUE format (repeatable, overrides manifest defaults)")
-	cmd.Flags().StringSlice("port", nil, "Expose ports in format PORT or HOST_PORT:CONTAINER_PORT (repeatable)")
+	cmd.Flags().StringSlice("port", nil, "Expose ports in format PORT or HOST_PORT:CONTAINER_PORT (repeatable, legacy)")
+	cmd.Flags().StringSlice("expose", nil, "Expose ports in Docker format: [HOST_PORT:]CONTAINER_PORT[:PROTOCOL] (repeatable)")
+	cmd.Flags().Bool("no-expose", false, "Disable all port exposure (overrides manifest defaults for secure-by-default)")
 	cmd.Flags().String("kernel-cmdline", "", "Additional kernel cmdline parameters")
 	cmd.Flags().String("kernel", "", "Override kernel image path (vmlinux)")
 	cmd.Flags().String("initramfs", "", "Override initramfs image path (.cpio.gz)")

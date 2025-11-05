@@ -549,10 +549,20 @@ const (
 
 // NetworkConfig defines image-level network configuration defaults.
 type NetworkConfig struct {
-	Mode       NetworkMode `json:"mode"`
-	Subnet     string      `json:"subnet,omitempty"`      // For bridged mode: CIDR (e.g., "10.1.0.0/24")
-	Gateway    string      `json:"gateway,omitempty"`     // For bridged mode: gateway IP
-	AutoAssign bool        `json:"auto_assign,omitempty"` // For bridged mode: auto-allocate IPs from subnet
+	Mode       NetworkMode   `json:"mode"`
+	Subnet     string        `json:"subnet,omitempty"`      // For bridged mode: CIDR (e.g., "10.1.0.0/24")
+	Gateway    string        `json:"gateway,omitempty"`     // For bridged mode: gateway IP
+	AutoAssign bool          `json:"auto_assign,omitempty"` // For bridged mode: auto-allocate IPs from subnet
+	Expose     []PortExpose  `json:"expose,omitempty"`      // Ports the application listens on (like Docker EXPOSE)
+}
+
+// PortExpose defines a port that the application listens on inside the VM.
+// Like Docker's EXPOSE directive, this is documentation/metadata about what ports
+// the application uses. Actual host port mapping is decided at VM creation time.
+type PortExpose struct {
+	Port     int    `json:"port"`               // Port inside the VM (required)
+	Protocol string `json:"protocol,omitempty"` // "tcp" or "udp" (defaults to "tcp")
+	HostPort int    `json:"host_port,omitempty"` // Optional: explicit host port mapping
 }
 
 // Normalize trims and normalizes network configuration fields.
@@ -563,6 +573,14 @@ func (n *NetworkConfig) Normalize() {
 	n.Mode = NetworkMode(strings.ToLower(strings.TrimSpace(string(n.Mode))))
 	n.Subnet = strings.TrimSpace(n.Subnet)
 	n.Gateway = strings.TrimSpace(n.Gateway)
+
+	// Normalize expose ports
+	for i := range n.Expose {
+		n.Expose[i].Protocol = strings.ToLower(strings.TrimSpace(n.Expose[i].Protocol))
+		if n.Expose[i].Protocol == "" {
+			n.Expose[i].Protocol = "tcp"
+		}
+	}
 }
 
 // Validate checks network configuration for semantic correctness.
@@ -581,5 +599,19 @@ func (n NetworkConfig) Validate() error {
 	default:
 		return fmt.Errorf("network: unsupported mode %q (must be vsock, bridged, or dhcp)", n.Mode)
 	}
+
+	// Validate expose ports
+	for i, port := range n.Expose {
+		if port.Port < 1 || port.Port > 65535 {
+			return fmt.Errorf("network: expose[%d].port must be 1-65535, got %d", i, port.Port)
+		}
+		if port.Protocol != "" && port.Protocol != "tcp" && port.Protocol != "udp" {
+			return fmt.Errorf("network: expose[%d].protocol must be tcp or udp, got %q", i, port.Protocol)
+		}
+		if port.HostPort != 0 && (port.HostPort < 1 || port.HostPort > 65535) {
+			return fmt.Errorf("network: expose[%d].host_port must be 1-65535, got %d", i, port.HostPort)
+		}
+	}
+
 	return nil
 }

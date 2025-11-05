@@ -135,9 +135,16 @@ Network modes:
 - **vsock**: No Ethernet, vsock-only communication
 - **dhcp**: Tap device provided, VM runs DHCP client
 
-Port exposures:
-- Defines which ports the workload listens on
-- Can be completely replaced with `--port` flags at VM creation
+Port exposures (Docker-style):
+- **Declaration**: Defines which ports the workload listens on inside the VM
+- **Like Docker EXPOSE**: Documents what ports the app uses, but doesn't actually map them
+- **Runtime mapping**: At VM creation, use `--expose` to map host ports
+  - Auto-assigned: `--expose 3000` → host port 2234 (auto)
+  - Explicit: `--expose 8080:3000:tcp` → host:8080 → vm:3000
+  - Disable all: `--no-expose` → no ports mapped (secure by default)
+- **host_port field**: Optional static host port in manifest (rare, usually auto-assigned)
+- **Auto-allocation**: Host ports start from 2234 and increment, tracked across all VMs
+- **Integration**: Automatically programmed into driftd's eBPF TC NAT dataplane
 
 ### Actions
 

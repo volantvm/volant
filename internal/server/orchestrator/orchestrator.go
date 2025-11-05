@@ -488,6 +488,38 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 	seedDisk = preparedSeedDisk
 	cloudInitRecord = record
 
+	// Auto-assign host ports for exposed ports (Docker-style port mapping)
+	// Like Docker's '-p' flag: manifest declares VM ports, we assign host ports
+	if len(configToStore.Expose) > 0 {
+		// Get all currently allocated host ports across all VMs
+		allocatedPorts, err := e.getAllocatedHostPorts(ctx)
+		if err != nil {
+			e.rollbackCreate(ctx, vmRecord)
+			return nil, fmt.Errorf("get allocated host ports: %w", err)
+		}
+
+		// Auto-assign host ports for any expose rules without explicit host_port
+		nextPort := 2234 // Starting port for auto-assignment
+		for i := range configToStore.Expose {
+			if configToStore.Expose[i].HostPort == 0 {
+				// Find next available port
+				for allocatedPorts[nextPort] {
+					nextPort++
+				}
+				configToStore.Expose[i].HostPort = nextPort
+				allocatedPorts[nextPort] = true // Mark as used
+				nextPort++
+			} else {
+				// Check if explicitly specified port is already in use
+				if allocatedPorts[configToStore.Expose[i].HostPort] {
+					e.rollbackCreate(ctx, vmRecord)
+					return nil, fmt.Errorf("host port %d already in use", configToStore.Expose[i].HostPort)
+				}
+				allocatedPorts[configToStore.Expose[i].HostPort] = true
+			}
+		}
+	}
+
 	configPayload, err := vmconfig.Marshal(configToStore)
 	if err != nil {
 		if seedDisk != nil {
@@ -2267,6 +2299,49 @@ func (e *engine) setVMState(ctx context.Context, vmID int64, status db.VMStatus,
 	}); err != nil {
 		e.logger.Error("update vm state", "vm_id", vmID, "status", status, "error", err)
 	}
+}
+
+// getAllocatedHostPorts returns a map of all host ports currently in use by VMs.
+// This is used to prevent port conflicts during auto-assignment.
+func (e *engine) getAllocatedHostPorts(ctx context.Context) (map[int]bool, error) {
+	allocated := make(map[int]bool)
+
+	err := e.store.WithTx(ctx, func(q db.Queries) error {
+		vms, err := q.VirtualMachines().List(ctx)
+		if err != nil {
+			return err
+		}
+
+		for _, vm := range vms {
+			cfgRecord, err := q.VMConfigs().GetCurrent(ctx, vm.ID)
+			if err != nil {
+				continue // Skip VMs without config
+			}
+			if cfgRecord == nil {
+				continue
+			}
+
+			versioned, err := vmconfig.FromDB(*cfgRecord)
+			if err != nil {
+				continue // Skip invalid configs
+			}
+
+			// Extract host ports from this VM's expose rules
+			for _, expose := range versioned.Config.Expose {
+				if expose.HostPort > 0 {
+					allocated[expose.HostPort] = true
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return allocated, nil
 }
 
 func (e *engine) computeDriftRoutes(vm db.VM, netCfg *imagespec.NetworkConfig, exposes []vmconfig.Expose) ([]routes.Route, error) {

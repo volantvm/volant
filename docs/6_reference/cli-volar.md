@@ -21,6 +21,9 @@ Source: internal/cli/standard.
     - --runtime <type>
     - --cpu <n>
     - --memory <mb>
+    - --env KEY=VALUE (repeatable) — set environment variables
+    - --expose [HOST_PORT:]CONTAINER_PORT[:PROTOCOL] (repeatable) — Docker-style port mapping
+    - --no-expose — disable all port exposure (secure by default)
     - --kernel-cmdline <extra>
     - --config <path to JSON>
     - --api-host <host> / --api-port <port>

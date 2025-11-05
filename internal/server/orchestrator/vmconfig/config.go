@@ -207,8 +207,9 @@ func (c Config) Validate() error {
 		if rule.Port > 65535 {
 			return fmt.Errorf("vmconfig: expose port must be <= 65535")
 		}
-		if rule.HostPort <= 0 {
-			return fmt.Errorf("vmconfig: expose host_port must be greater than zero")
+		// HostPort can be 0 (auto-assign) or 1-65535
+		if rule.HostPort < 0 {
+			return fmt.Errorf("vmconfig: expose host_port must be >= 0 (0 means auto-assign)")
 		}
 		if rule.HostPort > 65535 {
 			return fmt.Errorf("vmconfig: expose host_port must be <= 65535")
@@ -434,11 +435,6 @@ func FromManifestWithOverrides(manifest *imagespec.Manifest, overrides Overrides
 		cfg.Metadata["env"] = envMap
 	}
 
-	// Apply port exposures (if provided in overrides)
-	if len(overrides.ExposePorts) > 0 {
-		cfg.Expose = overrides.ExposePorts
-	}
-
 	// Apply network configuration
 	if manifest.Network != nil {
 		cfg.Network = manifest.Network
@@ -449,6 +445,25 @@ func FromManifestWithOverrides(manifest *imagespec.Manifest, overrides Overrides
 			networkCopy.Mode = imagespec.NetworkMode(*overrides.NetworkMode)
 			cfg.Network = &networkCopy
 		}
+
+		// Apply manifest expose ports (like Docker EXPOSE - declares what ports app listens on)
+		if len(manifest.Network.Expose) > 0 {
+			cfg.Expose = make([]Expose, len(manifest.Network.Expose))
+			for i, port := range manifest.Network.Expose {
+				cfg.Expose[i] = Expose{
+					Port:     port.Port,
+					Protocol: port.Protocol,
+					HostPort: port.HostPort, // Optional: if manifest specifies host port
+				}
+			}
+		}
+	}
+
+	// Override port exposures (if provided at VM creation time - highest priority)
+	// Note: nil means "not specified, use manifest defaults"
+	//       empty slice means "explicitly disable all ports" (--no-expose flag)
+	if overrides.ExposePorts != nil {
+		cfg.Expose = overrides.ExposePorts
 	}
 
 	// Copy other manifest fields

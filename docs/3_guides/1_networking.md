@@ -71,3 +71,94 @@ For bridged mode, the orchestrator computes:
 - netmask derived from subnet mask (formatNetmask)
 
 This is passed to the runtime; the guest should configure eth0 accordingly on boot.
+
+## Port Mapping (Docker-Style)
+
+Volant supports Docker-style port mapping to expose VM services to the host. Port exposure works in two phases:
+
+### 1. Image Manifest (Declaration)
+
+Images declare what ports the application listens on inside the VM using the `network.expose` array in `manifest.json`:
+
+```toml
+[[network.expose]]
+port = 3000
+protocol = "tcp"
+
+[[network.expose]]
+port = 8080
+protocol = "tcp"
+host_port = 9000  # Optional: explicit host port mapping
+```
+
+This is similar to Docker's `EXPOSE` directive - it's documentation about what ports the app uses, but doesn't actually map them.
+
+### 2. VM Creation (Runtime Mapping)
+
+At VM creation time, you can:
+
+**Auto-assign host ports** (default behavior):
+```bash
+volar vms create myvm --image myapp
+# Manifest ports get auto-assigned: 3000→2234, 8080→2235
+```
+
+**Explicitly map host ports** using `--expose`:
+```bash
+# Docker-style syntax: [HOST_PORT:]CONTAINER_PORT[:PROTOCOL]
+volar vms create myvm --image myapp --expose 8080:3000:tcp --expose 9090:8080:tcp
+```
+
+**Disable all port exposure** (secure by default):
+```bash
+volar vms create myvm --image myapp --no-expose
+```
+
+### Host Port Auto-Allocation
+
+When ports are not explicitly mapped:
+- Host ports are auto-assigned sequentially starting from **2234**
+- Volant tracks all allocated ports across VMs to prevent conflicts
+- If an explicit port is already in use, VM creation will fail
+
+### Integration with driftd
+
+Port mappings are automatically programmed into driftd's eBPF TC dataplane:
+- NAT rules forward `host_ip:host_port` → `vm_ip:vm_port`
+- Stateful connection tracking for TCP and UDP
+- Routes persist across VM restarts
+- No manual configuration required
+
+### Examples
+
+**Web application with auto-assigned ports:**
+```toml
+# manifest.toml
+[[network.expose]]
+port = 80
+protocol = "tcp"
+```
+```bash
+volar vms create web --image nginx
+# Access via http://host_ip:2234 (auto-assigned)
+```
+
+**Database with explicit port:**
+```bash
+volar vms create postgres --image postgres:alpine --expose 5432:5432:tcp
+# Access via postgresql://host_ip:5432
+```
+
+**Multi-port service:**
+```bash
+volar vms create app --image myapp \
+  --expose 8080:3000:tcp \
+  --expose 8081:3001:tcp \
+  --expose 9000:9000:udp
+```
+
+**Secure deployment (no external ports):**
+```bash
+volar vms create internal-service --image worker --no-expose
+# Only accessible via vsock or internal VM network
+```

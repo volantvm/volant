@@ -30,7 +30,7 @@ Optional fields:
 - image, image_digest (for OCI lineage)
 - disks[]: { name, source, format?: raw|qcow2, checksum?, readonly, target? }
 - cloud_init: { datasource, seed_mode (default vfat), user_data/meta_data/network_config }
-- network: { mode: vsock|bridged|dhcp, subnet?, gateway?, auto_assign? }
+- network: { mode: vsock|bridged|dhcp, subnet?, gateway?, auto_assign?, expose?: [{port, protocol?, host_port?}, ...] }
 - devices: { pci_passthrough?: ["0000:01:00.0"...], allowlist?: ["vendor:device" or "vendor:*"] }
 - actions: map<string, { description?, method, path, timeout_ms? }>
 - health_check: { endpoint, timeout_ms }
