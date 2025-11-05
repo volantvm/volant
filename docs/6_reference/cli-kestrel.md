@@ -15,5 +15,8 @@ The agent receives runtime arguments via the kernel cmdline, encoded by the orch
 - runtime (imagespec.RuntimeKey)
 - api host/port (imagespec.APIHostKey/APIPortKey)
 - encoded manifest (imagespec.CmdlineKey)
+- environment variables (volant.env as base64 JSON, decoded from /proc/cmdline)
+
+Kestrel decodes environment variables from the manifest's Workload.Env map[string]string, which are encoded as base64 JSON in the kernel cmdline and made available to the workload.
 
 For most users, there are no CLI flags to pass directly to kestrel; configuration is provided through the manifest and per-VM config.

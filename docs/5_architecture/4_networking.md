@@ -7,6 +7,34 @@ date: "2025-11-01"
 
 Volant supports three network modes declared in the image manifest (internal/imagespec/spec.go) and overridable per-VM via vmconfig.Config.
 
+## Load Balancer (driftd)
+
+Volant includes an integrated L4 load balancer called driftd that provides port forwarding and NAT capabilities.
+
+- Architecture
+  - eBPF TC-based dataplane for high-performance packet processing
+  - Single BPF program (drift_l4.bpf.o) with ingress/egress hooks
+  - Stateful connection tracking with shared maps
+  - Auto-detection of external network interface
+
+- Features
+  - Port forwarding: host ports to VM IPs
+  - Stateful NAT with bidirectional packet rewriting
+  - Connection tracking for consistent routing
+  - REST API for route management
+
+- Integration
+  - Controlled by volantd via internal/server/driftclient
+  - Automatically manages VM port forwarding rules
+  - Persistent route storage with automatic restoration
+  - Systemd service runs alongside volantd
+
+- Implementation
+  - Files: cmd/driftd, internal/drift
+  - BPF programs: internal/drift/bpf/drift_l4_ingress.c, internal/drift/bpf/drift_l4_egress.c
+  - TC attachment to external interface (not bridge)
+  - Route storage: file-based in /var/lib/volant/drift
+
 ## Modes
 
 - vsock
@@ -36,6 +64,8 @@ Volant supports three network modes declared in the image manifest (internal/ima
 - Code: internal/setup/setup.go
   - Creates bridge vbr0, assigns host CIDR, brings it up
   - Enables IP forwarding and sets NAT masquerade for the subnet
+  - Writes systemd units for both volantd and driftd
+  - Configures driftd to run alongside volantd for L4 load balancing
 
 ## Decision Logic (when to create taps, allocate IPs)
 

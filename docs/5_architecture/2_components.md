@@ -111,5 +111,27 @@ This section drills into each major subsystem with references to concrete code.
   - Files: cmd/kestrel, internal/agent (selected parts)
   - Responsibilities:
     - Decode manifest from kernel cmdline (volant.manifest)
+    - Decode environment variables from kernel cmdline (volant.env as base64 JSON)
     - Start workload and expose HTTP surface for actions, logs, OpenAPI
     - Optional DevTools bridge for browser runtimes
+
+## Load Balancer (driftd)
+
+- L4 load balancer with eBPF TC-based dataplane
+  - Files: cmd/driftd, internal/drift
+  - Features:
+    - Port forwarding from host to VMs
+    - Stateful NAT with connection tracking
+    - Auto-detection of external network interface
+    - TC-based packet processing (ingress/egress hooks)
+  - Architecture:
+    - Single BPF program: drift_l4.bpf.o
+    - Attached to external interface for TC ingress/egress
+    - Shared conntrack and stats maps for stateful packet rewriting
+    - REST API for route management (internal/drift/httpapi)
+  - Route storage:
+    - File-based persistence (internal/drift/routes)
+    - Automatic restoration on startup
+  - Integration:
+    - Controlled by volantd via driftclient (internal/server/driftclient)
+    - Manages VM port forwarding rules automatically

@@ -5,9 +5,10 @@ date: "2025-11-01"
 ---
 
 
-- **Agent (kestrel)**: In-guest process that acts as PID1 in default initramfs mode and proxies OpenAPI calls over vsock.
+- **Agent (kestrel)**: In-guest process that acts as PID1 in default initramfs mode, decodes environment variables from kernel cmdline (volant.env), and proxies OpenAPI calls over vsock.
 - **Bridge (vbr0)**: Linux bridge used to connect VM tap devices to the host network.
 - **CIDATA**: Volume label for NoCloud seed images used by cloud-init.
+- **driftd**: L4 load balancer with eBPF TC-based dataplane providing port forwarding and stateful NAT for VMs.
 - **Cloud-init**: Standard for VM initialization; Volant supports NoCloud via seed image.
 - **Deployment**: A named set of identical VM replicas managed by the orchestrator.
 - **fledge.toml**: Build-time configuration file defining how to build an image.

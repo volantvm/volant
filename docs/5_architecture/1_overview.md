@@ -18,6 +18,12 @@ Control Plane (volantd)
 - Data store: internal/server/db
 - Event bus (VM events): internal/server/eventbus
 
+Load Balancer (driftd)
+- L4 load balancer: cmd/driftd, internal/drift
+- eBPF TC-based dataplane with port forwarding and stateful NAT
+- Auto-detection of external interface
+- Controlled by volantd via internal/server/driftclient
+
 Guest (microVM)
 - Agent (kestrel): cmd/kestrel, internal/agent
 - Workload proxy (HTTP) and actions surface via agent
@@ -30,6 +36,8 @@ Builder (external)
 - Image Manifest (internal/imagespec/spec.go)
   - Declares workload, resources, networking defaults, cloud-init, actions, and boot media (exactly one of initramfs or rootfs).
   - Serialized into kernel cmdline (volant.manifest) via base64+gzip (Encode/Decode).
+  - Environment variables (Workload.Env map[string]string) encoded as base64 JSON in kernel cmdline (volant.env).
+  - Images define DEFAULT resources (cpu_cores, memory_mb); VMs can override at creation time.
 
 - VM Config (internal/server/orchestrator/vmconfig)
   - Per-VM/deployment overrides and recorded history. The orchestrator merges manifest defaults with config overrides at runtime.
@@ -68,7 +76,9 @@ Builder (external)
    - Emits VM events on the bus
 
 4) Agent (kestrel) boots inside guest
-   - Reads kernel args, decodes manifest, sets up workload environment
+   - Reads kernel args from /proc/cmdline
+   - Decodes manifest and environment variables (volant.env as base64 JSON)
+   - Sets up workload environment
    - Exposes an HTTP API for actions, logs, and OpenAPI
    - httpapi proxies selected requests to the agent (e.g., /vms/:name/agent/*)
 
@@ -84,8 +94,13 @@ Builder (external)
 
 ## Networking Details
 
-- Setup utility (internal/setup/setup.go) creates bridge vbr0, configures NAT, enables ip_forward, and writes a systemd unit for volantd.
+- Setup utility (internal/setup/setup.go) creates bridge vbr0, configures NAT, enables ip_forward, and writes systemd units for volantd and driftd.
 - Orchestrator only prepares a tap when the network mode requires it (needsTapDevice), and cleans it on stop/exit.
+- Load balancer (driftd) handles L4 port forwarding and NAT:
+  - Uses eBPF TC programs attached to external interface
+  - Auto-detects external interface for packet processing
+  - Manages stateful connection tracking
+  - Integrates with volantd for automatic VM route management
 
 ## Boot Media and Kernels
 
@@ -134,6 +149,8 @@ Builder (external)
 - Cloud-init builder: internal/server/orchestrator/cloudinit
 - Image manifest spec: internal/imagespec/spec.go
 - Setup utility: internal/setup/setup.go
+- Load balancer: cmd/driftd, internal/drift
+- Drift client: internal/server/driftclient
 
 ## Related Deep Dives
 

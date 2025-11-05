@@ -22,9 +22,12 @@ The endpoint points to the same script hosted in this repository:
 - https://raw.githubusercontent.com/volantvm/volant/main/scripts/install.sh
 
 The script will:
-- Download Volant binaries (volar, volantd, kestrel) from GitHub Releases
+- Download Volant binaries (volar, volantd, kestrel, driftd) from GitHub Releases
 - Download kernels: bzImage (compressed) and vmlinux (uncompressed ELF) from Volant releases - both contain the same embedded kestrel + init
-- Install to /usr/local/bin and /var/lib/volant/kernel
+- Download BPF objects: drift_l4.bpf.o for eBPF-based L4 load balancing
+- Install binaries to /usr/local/bin
+- Install kernels to /var/lib/volant/kernel
+- Install BPF objects to /var/lib/volant/bpf
 - Optionally run `sudo volar setup` (recommended)
 
 ## Setup (networking + systemd)
@@ -44,7 +47,8 @@ What it does:
 - Creates bridge vbr0, assigns host IP, brings it up
 - Enables IPv4 forwarding
 - Adds iptables MASQUERADE for the managed subnet
-- Writes systemd unit for volantd and enables it
+- Writes systemd units for volantd and driftd, enables both services
+- Configures driftd for L4 load balancing with eBPF dataplane
 
 Non-interactive example:
 ```bash
@@ -79,9 +83,13 @@ The installer can auto-install missing packages for Ubuntu/Debian, Fedora, RHEL/
 volar --version
 volantd --version
 kestrel --version
+driftd --version
 
 # Control plane status
 curl -s http://127.0.0.1:8080/healthz
+
+# Load balancer status
+curl -s http://127.0.0.1:8081/health
 ```
 
 If you skipped setup during install, run it later:
@@ -91,9 +99,10 @@ sudo volar setup --work-dir /var/lib/volant
 
 ## Uninstall / cleanup
 
-- Stop volantd: `sudo systemctl disable --now volantd`
+- Stop services: `sudo systemctl disable --now volantd driftd`
 - Remove bridge and iptables rules manually if you customized them
 - Remove work directory `/var/lib/volant` if desired
+- Remove BPF programs: driftd automatically detaches TC programs on shutdown
 
 ## Troubleshooting
 

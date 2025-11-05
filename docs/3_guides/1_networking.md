@@ -48,9 +48,20 @@ The effective mode is resolved by resolveNetworkConfig(manifest, vmConfig). VMâ€
 The CLI command `volar setup` (internal/cli/standard/setup.go) calls internal/setup/ to:
 - Create bridge (default vbr0) and assign host IP (default 192.168.127.1/24)
 - Enable IP forwarding and add MASQUERADE and FORWARD rules via iptables
-- Optionally write a systemd unit for volantd with proper environment
+- Write systemd units for volantd and driftd with proper environment
+- Configure driftd for L4 load balancing with eBPF dataplane
 
 You can run with --dry-run to print commands without applying them.
+
+## Load Balancer Integration (driftd)
+
+Volant includes an integrated L4 load balancer for port forwarding:
+
+- eBPF TC-based dataplane attached to external interface
+- Automatically managed by volantd for VM port forwarding
+- Stateful NAT with connection tracking
+- No manual configuration required for basic VM networking
+- Route persistence across restarts
 
 ## Kernel cmdline and IP
 

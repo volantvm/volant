@@ -159,7 +159,10 @@ A single Go binary that manages state (SQLite), allocates IPs, orchestrates micr
 A scriptable tool that creates, lists, stops, and manages microVMs and images. Designed for both automation and direct use.
 
 ### kestrel — The In-Guest Agent
-Handles two-stage boot, mounts essential filesystems, supervises workloads, performs health checks, and exposes an optional HTTP proxy.
+Handles two-stage boot, mounts essential filesystems, supervises workloads, performs health checks, and exposes an optional HTTP proxy. Decodes environment variables from kernel cmdline (volant.env as base64 JSON).
+
+### driftd — The L4 Load Balancer
+eBPF TC-based dataplane for port forwarding and stateful NAT. Auto-detects external interface, manages VM routes automatically via volantd integration.
 
 ### fledge — The Image Builder
 Builds rootfs- or initramfs-based images from declarative configs (fledge.toml + manifest.toml). Reproducible, CI/CD-friendly, and minimal by default.
@@ -218,7 +221,7 @@ Both paths support snapshot/restore and deterministic resource allocation.
 **Database:** SQLite
 **Agent:** Go (static binary)
 **C Shim:** Minimal init < 10 KB
-**Networking:** Linux bridge + static IPAM
+**Networking:** Linux bridge + static IPAM + eBPF L4 load balancer
 **Build Tools:** fledge, skopeo, umoci, busybox
 
 No external dependencies beyond Linux + KVM.
