@@ -76,6 +76,15 @@ type CreateVMRequest struct {
 	GroupID           *int64
 	// Overrides allows runtime-specific configuration that takes precedence over manifest defaults
 	Overrides vmconfig.Overrides
+	// Volumes to attach to the VM (format: "volume_name:mount_point[:ro]")
+	Volumes []VolumeAttachment
+}
+
+// VolumeAttachment describes a volume mount request
+type VolumeAttachment struct {
+	VolumeName string
+	MountPoint string
+	ReadOnly   bool
 }
 
 // Deployment represents a managed group of VM replicas.
@@ -439,6 +448,22 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 		cmdlineArgs["volant.dns_server"] = e.hostIP.String()
 		cmdlineArgs["volant.dns_search"] = "volant"
 
+		// Encode volume mount points (if any)
+		if len(req.Volumes) > 0 {
+			// Format: mount1:path1,mount2:path2:ro
+			var volumeMounts []string
+			for _, volAttach := range req.Volumes {
+				mountEntry := volAttach.MountPoint
+				if volAttach.ReadOnly {
+					mountEntry = mountEntry + ":ro"
+				}
+				volumeMounts = append(volumeMounts, mountEntry)
+			}
+			if len(volumeMounts) > 0 {
+				cmdlineArgs["volant.volumes"] = strings.Join(volumeMounts, ",")
+			}
+		}
+
 		// Encode environment variables
 		if envData, ok := configToStore.Metadata["env"]; ok && envData != nil {
 			if envMap, ok := envData.(map[string]string); ok && len(envMap) > 0 {
@@ -498,7 +523,43 @@ func (e *engine) CreateVM(ctx context.Context, req CreateVMRequest) (*db.VM, err
 
 	e.publishEvent(ctx, orchestratorevents.TypeVMCreated, orchestratorevents.VMStatusStarting, vmRecord, "vm record created")
 
+	// Process volume attachments
+	var volumeDisks []runtime.Disk
+	if len(req.Volumes) > 0 {
+		for _, volAttach := range req.Volumes {
+			// Get volume from database
+			vol, err := e.store.Queries().Volumes().GetByName(ctx, volAttach.VolumeName)
+			if err != nil {
+				e.rollbackCreate(ctx, vmRecord)
+				return nil, fmt.Errorf("volume not found: %s: %w", volAttach.VolumeName, err)
+			}
+
+			// Create volume mount record in database
+			mount := &db.VolumeMount{
+				VolumeID:   vol.ID,
+				VMName:     vmRecord.Name,
+				MountPoint: volAttach.MountPoint,
+				ReadOnly:   volAttach.ReadOnly,
+			}
+			if err := e.store.Queries().VolumeMounts().Create(ctx, mount); err != nil {
+				e.rollbackCreate(ctx, vmRecord)
+				return nil, fmt.Errorf("attach volume %s: %w", volAttach.VolumeName, err)
+			}
+
+			// Add to disk list for launcher
+			volumeDisks = append(volumeDisks, runtime.Disk{
+				Name:     vol.Name,
+				Path:     vol.HostPath,
+				Readonly: volAttach.ReadOnly,
+			})
+
+			e.logger.Info("attached volume", "vm", vmRecord.Name, "volume", vol.Name, "mount", volAttach.MountPoint, "readonly", volAttach.ReadOnly)
+		}
+	}
+
 	additionalDisks := buildAdditionalDisks(req.Manifest)
+	// Append volume disks to additional disks
+	additionalDisks = append(additionalDisks, volumeDisks...)
 
 	var seedDisk *runtime.Disk
 	var cloudInitRecord *db.VMCloudInit
@@ -825,6 +886,10 @@ func (e *engine) destroyVM(ctx context.Context, name string, reconcile bool) (*d
 			return err
 		}
 		if err := q.VMCloudInit().Delete(ctx, vm.ID); err != nil {
+			return err
+		}
+		// Detach all volumes
+		if err := q.VolumeMounts().DeleteByVM(ctx, vm.Name); err != nil {
 			return err
 		}
 		return nil

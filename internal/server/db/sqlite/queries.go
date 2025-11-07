@@ -62,6 +62,14 @@ func (q *queries) VMCloudInit() db.VMCloudInitRepository {
 	return &vmCloudInitRepository{exec: q.exec}
 }
 
+func (q *queries) Volumes() db.VolumeRepository {
+	return &volumeRepository{exec: q.exec}
+}
+
+func (q *queries) VolumeMounts() db.VolumeMountRepository {
+	return &volumeMountRepository{exec: q.exec}
+}
+
 type vmRepository struct {
 	exec executor
 }

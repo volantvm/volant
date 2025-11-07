@@ -202,6 +202,16 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, imag
 
 		// Add VM metrics endpoint to existing vms group
 		vms.GET(":name/metrics", api.getVMMetrics)
+
+		// Volume management
+		volumesGroup := v1.Group("/volumes")
+		{
+			volumesGroup.POST("", api.createVolume)
+			volumesGroup.GET("", api.listVolumes)
+			volumesGroup.GET(":name", api.getVolume)
+			volumesGroup.DELETE(":name", api.deleteVolume)
+			volumesGroup.POST(":name/backup", api.backupVolume)
+		}
 	}
 
 	r.GET("/ws/v1/vms/:name/devtools/*path", api.vmDevToolsWebSocket)
@@ -431,6 +441,7 @@ type createVMRequest struct {
 	APIPort       string             `json:"api_port"`
 	Config        *vmconfig.Config   `json:"config,omitempty"`
 	Overrides     vmconfig.Overrides `json:"overrides,omitempty"`
+	Volumes       []string           `json:"volumes,omitempty"` // Format: "volume:path" or "volume:path:ro"
 }
 
 type vfioDeviceInfoRequest struct {
@@ -853,6 +864,28 @@ func (api *apiServer) createVM(c *gin.Context) {
 		configClone = &clone
 	}
 
+	// Parse volume attachments
+	var volumeAttachments []orchestrator.VolumeAttachment
+	for _, volSpec := range req.Volumes {
+		parts := strings.Split(volSpec, ":")
+		if len(parts) < 2 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid volume format: %s (expected volume:path or volume:path:ro)", volSpec)})
+			return
+		}
+
+		attachment := orchestrator.VolumeAttachment{
+			VolumeName: strings.TrimSpace(parts[0]),
+			MountPoint: strings.TrimSpace(parts[1]),
+			ReadOnly:   false,
+		}
+
+		if len(parts) >= 3 && strings.TrimSpace(parts[2]) == "ro" {
+			attachment.ReadOnly = true
+		}
+
+		volumeAttachments = append(volumeAttachments, attachment)
+	}
+
 	vm, err := api.engine.CreateVM(c.Request.Context(), orchestrator.CreateVMRequest{
 		Name:              req.Name,
 		Image:             imageName,
@@ -863,6 +896,7 @@ func (api *apiServer) createVM(c *gin.Context) {
 		Manifest:          &manifestCopy,
 		Config:            configClone,
 		Overrides:         req.Overrides,
+		Volumes:           volumeAttachments,
 	})
 	if err != nil {
 		api.logger.Error("create vm", "vm", req.Name, "error", err)

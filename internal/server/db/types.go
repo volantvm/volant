@@ -108,6 +108,29 @@ type IPAllocation struct {
 	LeasedAt  *time.Time
 }
 
+// Volume represents a persistent storage volume that can be attached to VMs.
+type Volume struct {
+	ID         int64
+	Name       string
+	Type       string // ext4|squashfs|bind
+	SizeGB     int
+	Persistent bool
+	HostPath   string
+	BackupPath string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+// VolumeMount represents a volume attachment to a VM.
+type VolumeMount struct {
+	ID         int64
+	VolumeID   int64
+	VMName     string
+	MountPoint string
+	ReadOnly   bool
+	CreatedAt  time.Time
+}
+
 // ErrNoAvailableIPs is returned when the allocator cannot find a free address.
 var ErrNoAvailableIPs = errors.New("db: no available ip addresses")
 
@@ -146,6 +169,8 @@ type Queries interface {
 	VMGroups() VMGroupRepository
 	ImageArtifacts() ImageArtifactRepository
 	VMCloudInit() VMCloudInitRepository
+	Volumes() VolumeRepository
+	VolumeMounts() VolumeMountRepository
 }
 
 // VMRepository manages CRUD and lifecycle updates for VMs.
@@ -202,4 +227,23 @@ type IPRepository interface {
 	Assign(ctx context.Context, ip string, vmID int64) error
 	Release(ctx context.Context, ip string) error
 	Lookup(ctx context.Context, ip string) (*IPAllocation, error)
+}
+
+// VolumeRepository manages persistent storage volumes.
+type VolumeRepository interface {
+	Create(ctx context.Context, vol *Volume) error
+	GetByName(ctx context.Context, name string) (*Volume, error)
+	GetByID(ctx context.Context, id int64) (*Volume, error)
+	List(ctx context.Context) ([]Volume, error)
+	Delete(ctx context.Context, id int64) error
+	Update(ctx context.Context, vol *Volume) error
+}
+
+// VolumeMountRepository manages volume-to-VM attachments.
+type VolumeMountRepository interface {
+	Create(ctx context.Context, mount *VolumeMount) error
+	ListByVolume(ctx context.Context, volumeID int64) ([]VolumeMount, error)
+	ListByVM(ctx context.Context, vmName string) ([]VolumeMount, error)
+	DeleteByVMAndVolume(ctx context.Context, vmName string, volumeID int64) error
+	DeleteByVM(ctx context.Context, vmName string) error
 }
