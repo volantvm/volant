@@ -1,0 +1,38 @@
+version: "1.0"
+name: app
+services:
+    db:
+        image: mysql:8.0
+        memory: 512
+        vcpus: 1
+        environment:
+            MYSQL_DATABASE: wordpress
+            MYSQL_PASSWORD: secret
+            MYSQL_ROOT_PASSWORD: rootsecret
+            MYSQL_USER: wordpress
+        volumes:
+            - db-data:/var/lib/mysql
+    wordpress:
+        image: wordpress:latest
+        memory: 512
+        vcpus: 1
+        ports:
+            - 8080:80
+        environment:
+            WORDPRESS_DB_HOST: db
+            WORDPRESS_DB_NAME: wordpress
+            WORDPRESS_DB_PASSWORD: secret
+            WORDPRESS_DB_USER: wordpress
+        volumes:
+            - wordpress-data:/var/www/html
+        depends_on:
+            - db
+networks:
+    default:
+        subnet: 192.168.127.0/24
+        gateway: 192.168.127.1
+volumes:
+    db-data:
+        size: 10G
+    wordpress-data:
+        size: 10G

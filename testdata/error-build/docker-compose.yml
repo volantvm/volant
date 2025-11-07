@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: myapp:latest
+    ports:
+      - "8080:80"

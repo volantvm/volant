@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend1
+      - backend2
+
+  backend1:
+    image: myapp:latest
+    ports:
+      - "8001:8000"
+    environment:
+      SERVICE_NAME: backend1
+
+  backend2:
+    image: myapp:latest
+    ports:
+      - "8002:8000"
+    environment:
+      SERVICE_NAME: backend2
