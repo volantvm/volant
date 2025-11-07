@@ -27,6 +27,10 @@ type (
 	IPRepository            = internaldb.IPRepository
 	IPAllocation            = internaldb.IPAllocation
 	IPStatus                = internaldb.IPStatus
+	Volume                  = internaldb.Volume
+	VolumeMount             = internaldb.VolumeMount
+	VolumeRepository        = internaldb.VolumeRepository
+	VolumeMountRepository   = internaldb.VolumeMountRepository
 )
 
 const (
