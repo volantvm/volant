@@ -86,6 +86,11 @@ build-cli: ## Build the volar CLI binary
 	mkdir -p $(BIN_DIR)
 	$(GO) build -o $(BIN_DIR)/volar ./cmd/volar
 
+.PHONY: build-compose
+build-compose: ## Build the volant-compose CLI binary
+	mkdir -p $(BIN_DIR)
+	$(GO) build -o $(BIN_DIR)/volant-compose ./cmd/volant-compose
+
 .PHONY: build-drift
 ifeq ($(UNAME_S),Linux)
 build-drift: build-drift-bpf

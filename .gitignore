@@ -4,3 +4,39 @@ build/kestrel
 build/volant-initramfs.cpio.gz
 .DS_STORE
 bin
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+# Dependency directories
+node_modules/
+# Environment variables
+.env
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+.DS_Store
+
+# Task files
+# tasks.json
+# tasks/
+
+# Development and internal files
+.taskmaster/
+.cursor/
+.mcp.json
+CLAUDE.md
+VOLANT_MANIFESTO.md
+TRACK_F_SUMMARY.md
+test-volant-compose.sh
+.gitignore_pr 
