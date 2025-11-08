@@ -21,6 +21,7 @@ import (
 
 	"github.com/volantvm/volant/internal/server/app"
 	"github.com/volantvm/volant/internal/server/config"
+	"github.com/volantvm/volant/internal/server/daemon"
 	"github.com/volantvm/volant/internal/server/db/sqlite"
 	"github.com/volantvm/volant/internal/server/dns"
 	"github.com/volantvm/volant/internal/server/driftclient"
@@ -44,6 +45,14 @@ func main() {
 		logger.Error("load config", "error", err)
 		os.Exit(1)
 	}
+
+	// Start drift manager (L4 network switch)
+	driftMgr := daemon.NewDriftManager()
+	if err := driftMgr.Start(ctx); err != nil {
+		logger.Error("Failed to start drift", "error", err)
+		// Don't exit - continue with vsock fallback
+	}
+	defer driftMgr.Stop()
 
 	store, err := sqlite.Open(ctx, cfg.DatabasePath)
 	if err != nil {
@@ -132,10 +141,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Log startup info
+	logger.Info("Volant daemon starting",
+		"api", cfg.APIAdvertiseAddr,
+		"drift", driftMgr.Status())
+
 	if err := daemon.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("daemon exit", "error", err)
 		os.Exit(1)
 	}
+
+	logger.Info("Volant daemon stopped")
 }
 
 func parseSubnetOrExit(cidr string, logger *slog.Logger) *net.IPNet {

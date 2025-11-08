@@ -13,7 +13,7 @@ import (
 )
 
 // CreateStack creates a new stack in the database
-func (d *DB) CreateStack(ctx context.Context, stack *db.Stack) error {
+func (s *Store) CreateStack(ctx context.Context, stack *db.Stack) error {
 	envJSON, err := json.Marshal(stack.Environment)
 	if err != nil {
 		return fmt.Errorf("marshal environment: %w", err)
@@ -25,7 +25,7 @@ func (d *DB) CreateStack(ctx context.Context, stack *db.Stack) error {
 	`
 
 	now := time.Now()
-	result, err := d.db.ExecContext(ctx, query,
+	result, err := s.db.ExecContext(ctx, query,
 		stack.Name,
 		stack.Description,
 		stack.Status,
@@ -51,7 +51,7 @@ func (d *DB) CreateStack(ctx context.Context, stack *db.Stack) error {
 }
 
 // GetStack retrieves a stack by name
-func (d *DB) GetStack(ctx context.Context, name string) (*db.Stack, error) {
+func (s *Store) GetStack(ctx context.Context, name string) (*db.Stack, error) {
 	query := `
 		SELECT id, name, description, status, compose_file, environment, created_at, updated_at, deleted_at
 		FROM stacks
@@ -62,7 +62,7 @@ func (d *DB) GetStack(ctx context.Context, name string) (*db.Stack, error) {
 	var envJSON string
 	var deletedAt sql.NullTime
 
-	err := d.db.QueryRowContext(ctx, query, name).Scan(
+	err := s.db.QueryRowContext(ctx, query, name).Scan(
 		&stack.ID,
 		&stack.Name,
 		&stack.Description,
@@ -94,7 +94,7 @@ func (d *DB) GetStack(ctx context.Context, name string) (*db.Stack, error) {
 }
 
 // ListStacks returns all non-deleted stacks matching the filters
-func (d *DB) ListStacks(ctx context.Context, filters db.StackFilters) ([]*db.Stack, error) {
+func (s *Store) ListStacks(ctx context.Context, filters db.StackFilters) ([]*db.Stack, error) {
 	query := `
 		SELECT id, name, description, status, compose_file, environment, created_at, updated_at
 		FROM stacks
@@ -125,7 +125,7 @@ func (d *DB) ListStacks(ctx context.Context, filters db.StackFilters) ([]*db.Sta
 		args = append(args, filters.Offset)
 	}
 
-	rows, err := d.db.QueryContext(ctx, query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query stacks: %w", err)
 	}
@@ -163,7 +163,7 @@ func (d *DB) ListStacks(ctx context.Context, filters db.StackFilters) ([]*db.Sta
 }
 
 // UpdateStack updates a stack's properties
-func (d *DB) UpdateStack(ctx context.Context, name string, updates map[string]interface{}) error {
+func (s *Store) UpdateStack(ctx context.Context, name string, updates map[string]interface{}) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (d *DB) UpdateStack(ctx context.Context, name string, updates map[string]in
 	query += " WHERE name = ? AND deleted_at IS NULL"
 	args = append(args, name)
 
-	result, err := d.db.ExecContext(ctx, query, args...)
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update stack: %w", err)
 	}
@@ -212,7 +212,7 @@ func (d *DB) UpdateStack(ctx context.Context, name string, updates map[string]in
 }
 
 // DeleteStack marks a stack as deleted (soft delete)
-func (d *DB) DeleteStack(ctx context.Context, name string) error {
+func (s *Store) DeleteStack(ctx context.Context, name string) error {
 	query := `
 		UPDATE stacks
 		SET deleted_at = ?, updated_at = ?
@@ -220,7 +220,7 @@ func (d *DB) DeleteStack(ctx context.Context, name string) error {
 	`
 
 	now := time.Now()
-	result, err := d.db.ExecContext(ctx, query, now, now, name)
+	result, err := s.db.ExecContext(ctx, query, now, now, name)
 	if err != nil {
 		return fmt.Errorf("delete stack: %w", err)
 	}
@@ -237,13 +237,13 @@ func (d *DB) DeleteStack(ctx context.Context, name string) error {
 }
 
 // AddStackVM associates a VM with a stack
-func (d *DB) AddStackVM(ctx context.Context, stackID int64, vmID string, role string, ordinal int) error {
+func (s *Store) AddStackVM(ctx context.Context, stackID int64, vmID string, role string, ordinal int) error {
 	query := `
 		INSERT INTO stack_vms (stack_id, vm_id, role, ordinal, created_at)
 		VALUES (?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.ExecContext(ctx, query, stackID, vmID, role, ordinal, time.Now())
+	_, err := s.db.ExecContext(ctx, query, stackID, vmID, role, ordinal, time.Now())
 	if err != nil {
 		return fmt.Errorf("add stack vm: %w", err)
 	}
@@ -252,7 +252,7 @@ func (d *DB) AddStackVM(ctx context.Context, stackID int64, vmID string, role st
 }
 
 // GetStackVMs returns all VMs associated with a stack
-func (d *DB) GetStackVMs(ctx context.Context, stackID int64) ([]*db.StackVM, error) {
+func (s *Store) GetStackVMs(ctx context.Context, stackID int64) ([]*db.StackVM, error) {
 	query := `
 		SELECT id, stack_id, vm_id, role, ordinal, created_at
 		FROM stack_vms
@@ -260,7 +260,7 @@ func (d *DB) GetStackVMs(ctx context.Context, stackID int64) ([]*db.StackVM, err
 		ORDER BY ordinal, created_at
 	`
 
-	rows, err := d.db.QueryContext(ctx, query, stackID)
+	rows, err := s.db.QueryContext(ctx, query, stackID)
 	if err != nil {
 		return nil, fmt.Errorf("query stack vms: %w", err)
 	}
@@ -280,10 +280,10 @@ func (d *DB) GetStackVMs(ctx context.Context, stackID int64) ([]*db.StackVM, err
 }
 
 // RemoveStackVM removes a VM association from a stack
-func (d *DB) RemoveStackVM(ctx context.Context, stackID int64, vmID string) error {
+func (s *Store) RemoveStackVM(ctx context.Context, stackID int64, vmID string) error {
 	query := `DELETE FROM stack_vms WHERE stack_id = ? AND vm_id = ?`
 
-	result, err := d.db.ExecContext(ctx, query, stackID, vmID)
+	result, err := s.db.ExecContext(ctx, query, stackID, vmID)
 	if err != nil {
 		return fmt.Errorf("remove stack vm: %w", err)
 	}
