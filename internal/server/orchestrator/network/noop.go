@@ -26,7 +26,7 @@ func (n *NoopManager) PrepareTap(ctx context.Context, vmName, mac string) (strin
 	if sanitized == "" {
 		sanitized = "vm"
 	}
-	return fmt.Sprintf("volar-tap-%s", sanitized), nil
+	return fmt.Sprintf("volant-tap-%s", sanitized), nil
 }
 
 // CleanupTap is a no-op for the development manager.

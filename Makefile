@@ -82,9 +82,9 @@ build-agent: ## Build the kestrel agent binary
 	$(GO) build -o $(BIN_DIR)/kestrel ./cmd/kestrel
 
 .PHONY: build-cli
-build-cli: ## Build the volar CLI binary
+build-cli: ## Build the volant CLI binary
 	mkdir -p $(BIN_DIR)
-	$(GO) build -o $(BIN_DIR)/volar ./cmd/volar
+	$(GO) build -o $(BIN_DIR)/volant ./cmd/volant
 
 .PHONY: build-compose
 build-compose: ## Build the volant-compose CLI binary
@@ -115,7 +115,7 @@ install: build build-drift ## Install core binaries and drift into INSTALL_DIR (
 	mkdir -p $(INSTALL_DIR)
 	install -m 0755 $(BIN_DIR)/volantd $(INSTALL_DIR)/volantd
 	install -m 0755 $(BIN_DIR)/kestrel $(INSTALL_DIR)/kestrel
-	install -m 0755 $(BIN_DIR)/volar $(INSTALL_DIR)/volar
+	install -m 0755 $(BIN_DIR)/volant $(INSTALL_DIR)/volant
 	install -m 0755 $(BIN_DIR)/driftd $(INSTALL_DIR)/driftd
 	@if [ -f "$(BIN_DIR)/drift_l4_ingress.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_ingress.bpf.o" "$(INSTALL_DIR)/drift_l4_ingress.bpf.o"; fi
 	@if [ -f "$(BIN_DIR)/drift_l4_egress.bpf.o" ]; then install -m 0644 "$(BIN_DIR)/drift_l4_egress.bpf.o" "$(INSTALL_DIR)/drift_l4_egress.bpf.o"; fi

@@ -57,7 +57,7 @@ If you require more fine-grained control, it is possible to override the kernel 
 Volant provides:
 
 - **`volantd`** — Control plane (SQLite registry + VM orchestration)
-- **`volar`** — CLI for managing VMs and images
+- **`volant`** — CLI for managing VMs and images
 - **`kestrel`** — In-guest agent & init (PID 1)
 - **`driftd`** — L4 load balancer with eBPF dataplane (TC-based NAT/port forwarding)
 - **[`fledge`](https://github.com/volantvm/fledge)** — Image builder (OCI images → bootable artifacts)
@@ -77,7 +77,7 @@ Spin up your first microVM in under a minute.
 
 ### 1. Install the Volant toolchain
 ```bash
-# This installs volar (CLI), volantd (control plane), kestrel (guest agent),
+# This installs volant (CLI), volantd (control plane), kestrel (guest agent),
 # driftd (L4 load balancer), and default kernels to /var/lib/volant/kernel.
 # By default, setup creates a bridge (vbr0) at 192.168.127.1/24.
 
@@ -86,7 +86,7 @@ curl -fsSL https://get.volantvm.com | bash
 
 **Tip:** To inspect or customize network setup later:
 ```bash
-sudo volar setup --help
+sudo volant setup --help
 ```
 
 If you prefer to **skip automatic setup** and handle networking yourself:
@@ -101,7 +101,7 @@ curl -fsSL https://get.volantvm.com | bash -s -- --skip-setup
 Let's start with a Caddy initramfs image [(initramfs-image-example)](https://github.com/volantvm/initramfs-image-example)
 
 ```bash
-volar images install --manifest \
+volantimages install --manifest \
   https://github.com/volantvm/initramfs-image-example/releases/latest/download/caddy.json
 ```
 
@@ -109,7 +109,7 @@ volar images install --manifest \
 
 ### 3. Create and run your first VM
 ```bash
-volar vms create web --image caddy --cpu 2 --memory 512
+volantvms create web --image caddy --cpu 2 --memory 512
 ```
 
 Check it's alive:
@@ -124,10 +124,10 @@ curl 192.168.127.10
 
 This example runs **NGINX** directly from the official Docker image:
 ```bash
-volar images install --manifest \
+volantimages install --manifest \
   https://github.com/volantvm/oci-image-example/releases/latest/download/nginx.json
 
-volar vms create my-nginx --image nginx --cpu 1 --memory 1024
+volantvms create my-nginx --image nginx --cpu 1 --memory 1024
 curl http://192.168.127.11
 ```
 
@@ -146,7 +146,7 @@ cat > web-config.json <<'EOF'
 }
 EOF
 
-volar deployments create web-cluster \
+volantdeployments create web-cluster \
   --config web-config.json \
   --replicas 5
 ```

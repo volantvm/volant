@@ -18,9 +18,9 @@ func Execute() error {
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "volar",
-		Short: "volar command-line interface",
-		Long: `volar provides access to the VOLANT control plane.
+		Use:   "volant",
+		Short: "volant command-line interface",
+		Long: `volant provides access to the VOLANT control plane.
 
 Core commands:
   vms       Manage microVMs
@@ -46,9 +46,9 @@ Core commands:
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print the volar client version",
+		Short: "Print the volant client version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Fprintf(cmd.OutOrStdout(), "volar CLI (prototype)\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "volant CLI (prototype)\n")
 		},
 	}
 }

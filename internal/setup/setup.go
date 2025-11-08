@@ -73,7 +73,7 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 
 	if !opts.DryRun {
 		if os.Geteuid() != 0 {
-			return nil, errors.New("volar setup must be run as root (use --dry-run to preview)")
+			return nil, errors.New("volant setup must be run as root (use --dry-run to preview)")
 		}
 	}
 

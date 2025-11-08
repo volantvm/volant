@@ -1238,9 +1238,9 @@ func newVMsCallCmd() *cobra.Command {
 		Long: `Invoke a image operation by operationId or METHOD:PATH.
 
 Examples:
-  volar vms call myvm getStatus
-  volar vms call myvm POST:/api/action --body '{"key":"value"}'
-  volar vms call myvm updateConfig --body-file config.json --query key=value`,
+  volant vms call myvm getStatus
+  volant vms call myvm POST:/api/action --body '{"key":"value"}'
+  volant vms call myvm updateConfig --body-file config.json --query key=value`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			vmName := args[0]
