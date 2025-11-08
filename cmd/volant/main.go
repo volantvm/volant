@@ -40,13 +40,14 @@ Run 'volant COMMAND --help' for more information on a command.`,
 	// Add the new commands
 	rootCmd.AddCommand(newBuildCommand())
 	rootCmd.AddCommand(newStackCommand())
+	rootCmd.AddCommand(newMigrateCommand())
 
 	// For now, also execute the standard CLI to preserve existing functionality
 	// This allows us to gradually migrate commands
 	if len(os.Args) > 1 {
 		// Check if it's one of our new commands
 		switch os.Args[1] {
-		case "build", "stack":
+		case "build", "stack", "migrate":
 			// Execute our new root command
 			if err := rootCmd.Execute(); err != nil {
 				fmt.Fprintf(os.Stderr, "command error: %v\n", err)
