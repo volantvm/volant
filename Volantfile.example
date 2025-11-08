@@ -1,0 +1,38 @@
+# Volantfile Example - Unified build + runtime configuration
+
+[image]
+name = "myapp"
+version = "1.0"
+
+[build]
+strategy = "dockerfile"
+dockerfile = "Dockerfile"
+context = "."
+
+[build.args]
+VERSION = "1.0"
+ENV = "production"
+
+[runtime]
+cpu_cores = 2
+memory_mb = 512
+entrypoint = ["/app/server", "--port", "8080"]
+workdir = "/app"
+
+[runtime.env]
+PORT = "8080"
+HOST = "0.0.0.0"
+LOG_LEVEL = "info"
+
+[runtime.expose]
+ports = [80, 8080]
+
+[runtime.volumes]
+data = "/var/lib/myapp"
+config = "/etc/myapp"
+
+[runtime.health]
+command = ["curl", "-f", "http://localhost:8080/health"]
+interval = 30
+timeout = 5
+retries = 3

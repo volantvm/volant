@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/volantvm/volant/internal/config"
 )
 
 func newBuildCommand() *cobra.Command {
@@ -149,16 +150,38 @@ func buildFromDockerfile(ctx context.Context, dockerfile string, opts buildOptio
 	return nil
 }
 
-func buildFromVolantfile(ctx context.Context, volantfile string, opts buildOptions) error {
-	fmt.Printf("Building from Volantfile: %s\n", volantfile)
+func buildFromVolantfile(ctx context.Context, volantfilePath string, opts buildOptions) error {
+	fmt.Printf("Building from Volantfile: %s\n", volantfilePath)
 
-	// For now, delegate to fledge if available
+	// Load Volantfile
+	vf, err := config.LoadVolantfile(volantfilePath)
+	if err != nil {
+		return fmt.Errorf("failed to load Volantfile: %w", err)
+	}
+
+	fmt.Printf("✓ Loaded Volantfile for image: %s:%s\n", vf.Image.Name, vf.Image.Version)
+	fmt.Printf("  Strategy: %s\n", vf.Build.Strategy)
+	fmt.Printf("  CPU: %d cores, Memory: %dMB\n", vf.Runtime.CPUCores, vf.Runtime.MemoryMB)
+
+	// For now, delegate to fledge if available by creating temporary legacy files
 	if _, err := exec.LookPath("fledge"); err == nil {
-		return delegateToFledge(volantfile, opts)
+		// Create temporary legacy config files
+		tmpDir := "/tmp/volant-build"
+		os.MkdirAll(tmpDir, 0755)
+
+		fledgePath := filepath.Join(tmpDir, "fledge.toml")
+		manifestPath := filepath.Join(tmpDir, "manifest.toml")
+
+		if err := vf.SaveAsLegacy(fledgePath, manifestPath); err != nil {
+			return fmt.Errorf("failed to create legacy config: %w", err)
+		}
+
+		fmt.Println("✓ Converting to legacy format for fledge compatibility")
+		return delegateToFledge(fledgePath, opts)
 	}
 
 	// Fallback message
-	fmt.Println("Note: Fledge integration pending. Please use 'fledge build' directly for now.")
+	fmt.Println("Note: Full Volantfile support pending. Please use 'fledge build' directly for now.")
 	return nil
 }
 
