@@ -4,14 +4,20 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/volantvm/volant/internal/cli/client"
 	"github.com/volantvm/volant/internal/config"
+	"github.com/volantvm/volant/internal/imagespec"
+	"github.com/volantvm/volant/pkg/fsdetect"
 )
 
 func newBuildCommand() *cobra.Command {
@@ -212,16 +218,103 @@ func delegateToFledge(buildFile string, opts buildOptions) error {
 
 	// Auto-install if tag provided
 	if opts.Tag != "" {
-		return autoInstallImage(opts.Output, opts.Tag)
+		return autoInstallImage("http://127.0.0.1:7777", opts.Output, opts.Tag)
 	}
 
 	return nil
 }
 
-func autoInstallImage(imagePath, tag string) error {
+func autoInstallImage(apiURL, imagePath, tag string) error {
 	fmt.Printf("Auto-installing image with tag: %s\n", tag)
-	// TODO: Implement image installation
+	ctx := context.Background()
+
+	// Parse tag into name:version
+	name, version := parseImageTag(tag)
+
+	// Verify image file exists
+	if _, err := os.Stat(imagePath); err != nil {
+		return fmt.Errorf("image file not found: %w", err)
+	}
+
+	// Calculate checksum
+	checksum, err := calculateSHA256(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate checksum: %w", err)
+	}
+
+	// Detect filesystem format using unified fsdetect package
+	format := fsdetect.DetectFormat(imagePath, fsdetect.FormatSquashFS)
+
+	// Get absolute path for image
+	absPath, err := filepath.Abs(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Create manifest
+	manifest := imagespec.Manifest{
+		SchemaVersion: "1.0",
+		Name:          name,
+		Version:       version,
+		Runtime:       name, // Default runtime same as name
+		RootFS: imagespec.RootFS{
+			URL:      absPath,
+			Checksum: checksum,
+			Format:   format.String(),
+		},
+	}
+
+	// Normalize and validate
+	manifest.Normalize()
+	if err := manifest.Validate(); err != nil {
+		return fmt.Errorf("manifest validation failed: %w", err)
+	}
+
+	// Connect to volant daemon
+	c, err := client.New(apiURL)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	// Install the image
+	if err := c.InstallImage(ctx, manifest); err != nil {
+		return fmt.Errorf("failed to install image: %w", err)
+	}
+
+	fmt.Printf("✓ Image installed successfully: %s:%s\n", name, version)
+	fmt.Printf("  Format: %s\n", format)
+	fmt.Printf("  Path: %s\n", absPath)
+	fmt.Printf("  Checksum: %s\n", checksum)
+
 	return nil
+}
+
+// parseImageTag parses a tag in the format "name:version" or "name" (defaults to "latest")
+func parseImageTag(tag string) (name, version string) {
+	parts := strings.SplitN(tag, ":", 2)
+	name = parts[0]
+	if len(parts) == 2 {
+		version = parts[1]
+	} else {
+		version = "latest"
+	}
+	return name, version
+}
+
+// calculateSHA256 calculates the SHA256 checksum of a file
+func calculateSHA256(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func determineContext(args []string) string {

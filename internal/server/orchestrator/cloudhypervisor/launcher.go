@@ -21,6 +21,7 @@ import (
 
 	"github.com/volantvm/volant/internal/imagespec"
 	"github.com/volantvm/volant/internal/server/orchestrator/runtime"
+	"github.com/volantvm/volant/pkg/fsdetect"
 )
 
 // Launcher knows how to boot Cloud Hypervisor microVMs.
@@ -107,26 +108,20 @@ func (l *Launcher) Launch(ctx context.Context, spec runtime.LaunchSpec) (runtime
 			return nil, fmt.Errorf("cloudhypervisor: fetch rootfs: %w", err)
 		}
 
+		// Try to get filesystem type from spec.Args first (for backward compatibility)
 		rootfsType := strings.ToLower(strings.TrimSpace(spec.Args["rootfstype"]))
 		if rootfsType == "" {
 			if v, ok := spec.Args[imagespec.RootFSFSTypeKey]; ok {
 				rootfsType = strings.ToLower(strings.TrimSpace(v))
 			}
 		}
+		// If not specified in args, auto-detect from file extension using unified fsdetect
 		if rootfsType == "" {
-			lowerRoot := strings.ToLower(spec.RootFS)
-			switch {
-			case strings.HasSuffix(lowerRoot, ".squashfs"):
-				rootfsType = "squashfs"
-			case strings.HasSuffix(lowerRoot, ".xfs"):
-				rootfsType = "xfs"
-			case strings.HasSuffix(lowerRoot, ".btrfs"):
-				rootfsType = "btrfs"
-			case strings.HasSuffix(lowerRoot, ".img"):
-				rootfsType = "ext4"
-			}
+			format := fsdetect.DetectFormat(spec.RootFS, fsdetect.FormatSquashFS)
+			rootfsType = format.String()
 		}
-		rootfsReadOnly = rootfsType == "squashfs"
+		// Use fsdetect to determine if filesystem is read-only
+		rootfsReadOnly = fsdetect.IsReadOnly(fsdetect.Format(rootfsType))
 	}
 
 	logPath := filepath.Join(l.LogDir, fmt.Sprintf("%s.log", spec.Name))

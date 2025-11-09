@@ -15,6 +15,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+
+	"github.com/volantvm/volant/pkg/fsdetect"
 )
 
 const (
@@ -307,21 +309,9 @@ func (m *Manifest) Normalize() {
 	m.RootFS.Checksum = strings.TrimSpace(m.RootFS.Checksum)
 	m.RootFS.Format = normalizeFormat(m.RootFS.Format)
 	if m.RootFS.Format == "" {
-		// Auto-detect format from file extension
-		switch {
-		case strings.HasSuffix(m.RootFS.URL, ".squashfs"):
-			m.RootFS.Format = "squashfs"
-		case strings.HasSuffix(m.RootFS.URL, ".qcow2"):
-			m.RootFS.Format = "qcow2"
-		case strings.HasSuffix(m.RootFS.URL, ".xfs"):
-			m.RootFS.Format = "xfs"
-		case strings.HasSuffix(m.RootFS.URL, ".btrfs"):
-			m.RootFS.Format = "btrfs"
-		case strings.HasSuffix(m.RootFS.URL, ".ext4"):
-			m.RootFS.Format = "ext4"
-		default:
-			m.RootFS.Format = "raw" // Default for .img and unknown
-		}
+		// Auto-detect format from file extension using unified fsdetect package
+		// Default to squashfs for compressed, deterministic rootfs images
+		m.RootFS.Format = fsdetect.DetectFormat(m.RootFS.URL, fsdetect.FormatSquashFS).String()
 	}
 	m.Initramfs.URL = strings.TrimSpace(m.Initramfs.URL)
 	m.Initramfs.Checksum = strings.TrimSpace(m.Initramfs.Checksum)

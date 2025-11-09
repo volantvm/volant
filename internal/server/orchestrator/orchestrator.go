@@ -35,6 +35,7 @@ import (
 	"github.com/volantvm/volant/internal/server/orchestrator/network"
 	"github.com/volantvm/volant/internal/server/orchestrator/runtime"
 	"github.com/volantvm/volant/internal/server/orchestrator/vmconfig"
+	"github.com/volantvm/volant/pkg/fsdetect"
 )
 
 // Engine represents the VM orchestration core.
@@ -2241,26 +2242,11 @@ func formatNetmask(mask net.IPMask) string {
 }
 
 // detectRootFSType detects the filesystem type from the rootfs file path.
-// Looks at file extension to determine type: .squashfs, .img (ext4), .xfs, .btrfs
+// Uses the unified fsdetect package with squashfs as the default format.
 func detectRootFSType(rootfsPath string) string {
-	if rootfsPath == "" {
-		return "ext4" // default fallback
-	}
-
-	// Detect from file extension
-	switch {
-	case strings.HasSuffix(rootfsPath, ".squashfs"):
-		return "squashfs"
-	case strings.HasSuffix(rootfsPath, ".xfs"):
-		return "xfs"
-	case strings.HasSuffix(rootfsPath, ".btrfs"):
-		return "btrfs"
-	case strings.HasSuffix(rootfsPath, ".img"):
-		return "ext4"
-	default:
-		// For URLs or paths without extension, default to ext4 for backward compatibility
-		return "ext4"
-	}
+	// Use unified fsdetect package with squashfs as default
+	// (compressed, deterministic, production-ready)
+	return fsdetect.DetectFormat(rootfsPath, fsdetect.FormatSquashFS).String()
 }
 
 func (e *engine) launchContext() context.Context {
