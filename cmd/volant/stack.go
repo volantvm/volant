@@ -6,213 +6,92 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
+	"strconv"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/volantvm/volant/internal/cli/client"
 )
 
 func newStackCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stack",
 		Short: "Manage multi-VM stacks",
-		Long: `Manage multi-VM application stacks.
+		Long: `Manage multi-VM application stacks (groups of VMs).
 
-Volant supports both docker-compose.yml and volant.yaml formats.
-The format is auto-detected based on file name and content.`,
+Stacks are aliases for deployments with Docker-familiar terminology.`,
 	}
 
-	cmd.AddCommand(newStackUpCommand())
-	cmd.AddCommand(newStackDownCommand())
 	cmd.AddCommand(newStackPsCommand())
-	cmd.AddCommand(newStackLogsCommand())
+	cmd.AddCommand(newStackDownCommand())
 	cmd.AddCommand(newStackScaleCommand())
 
 	return cmd
 }
 
-func newStackUpCommand() *cobra.Command {
-	var file string
-
-	cmd := &cobra.Command{
-		Use:   "up",
-		Short: "Deploy a stack",
-		Long: `Deploy a multi-VM application stack.
-
-Auto-detects docker-compose.yml or volant.yaml format.
-
-Examples:
-  # Deploy from docker-compose.yml (auto-detected)
-  volant stack up
-
-  # Deploy from specific file
-  volant stack up -f my-compose.yml
-
-  # Deploy from volant.yaml
-  volant stack up -f volant.yaml`,
+func newStackPsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "ps",
+		Aliases: []string{"list", "ls"},
+		Short:   "List stacks",
+		Long:    "List all stacks (deployments).",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStackUp(file)
+			ctx := context.Background()
+
+			apiURL := cmd.Flag("api").Value.String()
+			c, err := client.New(apiURL)
+			if err != nil {
+				return err
+			}
+
+			deployments, err := c.ListDeployments(ctx)
+			if err != nil {
+				return fmt.Errorf("list stacks: %w", err)
+			}
+
+			if len(deployments) == 0 {
+				fmt.Println("No stacks found")
+				return nil
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "NAME\tREPLICAS\tREADY\tCREATED")
+			for _, dep := range deployments {
+				fmt.Fprintf(w, "%s\t%d\t%d\t%s\n",
+					dep.Name,
+					dep.DesiredReplicas,
+					dep.ReadyReplicas,
+					dep.CreatedAt.Format("2006-01-02 15:04"),
+				)
+			}
+			w.Flush()
+
+			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&file, "file", "f", "", "Stack definition file (default: auto-detect)")
-
-	return cmd
-}
-
-func runStackUp(file string) error {
-	ctx := context.Background()
-
-	// Auto-detect file if not specified
-	if file == "" {
-		file = detectStackFile()
-		if file == "" {
-			return fmt.Errorf("no stack file found (tried: docker-compose.yml, compose.yml, volant.yaml)")
-		}
-	}
-
-	fmt.Printf("Deploying stack from: %s\n", file)
-
-	// Detect format
-	format, err := detectStackFormat(file)
-	if err != nil {
-		return err
-	}
-
-	switch format {
-	case "compose":
-		return deployDockerCompose(ctx, file)
-	case "volant":
-		return deployVolantStack(ctx, file)
-	default:
-		return fmt.Errorf("unknown stack format: %s", format)
-	}
-}
-
-func detectStackFile() string {
-	// Try in order of preference
-	candidates := []string{
-		"docker-compose.yml",
-		"docker-compose.yaml",
-		"compose.yml",
-		"compose.yaml",
-		"volant.yaml",
-		"volant.yml",
-	}
-
-	for _, file := range candidates {
-		if _, err := os.Stat(file); err == nil {
-			return file
-		}
-	}
-
-	return ""
-}
-
-func detectStackFormat(file string) (string, error) {
-	basename := strings.ToLower(filepath.Base(file))
-
-	// Check by filename
-	if strings.Contains(basename, "compose") {
-		return "compose", nil
-	}
-	if strings.Contains(basename, "volant") {
-		return "volant", nil
-	}
-
-	// Check by extension and content
-	if strings.HasSuffix(basename, ".yml") || strings.HasSuffix(basename, ".yaml") {
-		// Try to read first few lines to detect format
-		data := make([]byte, 512)
-		f, err := os.Open(file)
-		if err != nil {
-			return "", err
-		}
-		defer f.Close()
-
-		n, _ := f.Read(data)
-		content := string(data[:n])
-
-		// Look for Docker Compose indicators
-		if strings.Contains(content, "version:") && strings.Contains(content, "services:") {
-			return "compose", nil
-		}
-		// Look for Volant indicators
-		if strings.Contains(content, "vms:") || strings.Contains(content, "stacks:") {
-			return "volant", nil
-		}
-	}
-
-	return "", fmt.Errorf("cannot determine stack format for file: %s", file)
-}
-
-func deployDockerCompose(ctx context.Context, file string) error {
-	fmt.Println("✓ Detected Docker Compose format")
-
-	// Check if volant-compose is available
-	if _, err := exec.LookPath("volant-compose"); err == nil {
-		fmt.Println("Converting docker-compose.yml to Volant format...")
-
-		// Convert compose to volant format
-		cmd := exec.Command("volant-compose", "-f", file, "-o", "/tmp/volant-converted.yaml")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to convert docker-compose: %w", err)
-		}
-
-		fmt.Println("✓ Converted docker-compose.yml to Volant stack")
-
-		// Deploy the converted stack
-		return deployVolantStack(ctx, "/tmp/volant-converted.yaml")
-	}
-
-	// Fallback message
-	fmt.Println("Note: Docker Compose conversion pending. Please use 'volant-compose' to convert first.")
-	return nil
-}
-
-func deployVolantStack(ctx context.Context, file string) error {
-	fmt.Printf("Deploying Volant stack from: %s\n", file)
-
-	// TODO: Implement actual deployment logic
-	// For now, show what would be deployed
-	fmt.Println("✓ Stack validation passed")
-	fmt.Println("✓ Stack would be deployed (implementation pending)")
-
-	return nil
 }
 
 func newStackDownCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "down",
+		Use:   "down STACK",
 		Short: "Stop and remove a stack",
+		Long:  "Stop and remove a stack (deployment) and all its VMs.",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Stopping stack (implementation pending)...")
-			return nil
-		},
-	}
-}
+			ctx := context.Background()
+			stackName := args[0]
 
-func newStackPsCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ps",
-		Short: "List stacks",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Listing stacks (implementation pending)...")
-			return nil
-		},
-	}
-}
+			apiURL := cmd.Flag("api").Value.String()
+			c, err := client.New(apiURL)
+			if err != nil {
+				return err
+			}
 
-func newStackLogsCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "logs [STACK]",
-		Short: "View stack logs",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Viewing logs (implementation pending)...")
+			if err := c.DeleteDeployment(ctx, stackName); err != nil {
+				return fmt.Errorf("remove stack: %w", err)
+			}
+
+			fmt.Printf("✓ Stack %s removed\n", stackName)
 			return nil
 		},
 	}
@@ -220,22 +99,43 @@ func newStackLogsCommand() *cobra.Command {
 
 func newStackScaleCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "scale SERVICE=REPLICAS",
-		Short: "Scale a service",
+		Use:   "scale STACK REPLICAS",
+		Short: "Scale a stack",
+		Long: `Scale a stack to the specified number of replicas.
+
+Examples:
+  volant stack scale myapp 3
+  volant stack scale web 5`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("specify service and replicas (e.g., web=3)")
+			ctx := context.Background()
+			stackName := args[0]
+
+			replicas, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid replicas: %s (must be a number)", args[1])
 			}
 
-			parts := strings.Split(args[0], "=")
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid format, use SERVICE=REPLICAS")
+			if replicas < 0 {
+				return fmt.Errorf("replicas must be >= 0")
 			}
 
-			service := parts[0]
-			replicas := parts[1]
+			apiURL := cmd.Flag("api").Value.String()
+			c, err := client.New(apiURL)
+			if err != nil {
+				return err
+			}
 
-			fmt.Printf("Scaling %s to %s replicas (implementation pending)...\n", service, replicas)
+			deployment, err := c.ScaleDeployment(ctx, stackName, replicas)
+			if err != nil {
+				return fmt.Errorf("scale stack: %w", err)
+			}
+
+			fmt.Printf("✓ Stack %s scaled to %d replicas (%d ready)\n",
+				deployment.Name,
+				deployment.DesiredReplicas,
+				deployment.ReadyReplicas)
+
 			return nil
 		},
 	}

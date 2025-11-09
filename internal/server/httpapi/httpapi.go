@@ -149,6 +149,16 @@ func New(logger *slog.Logger, engine orchestrator.Engine, bus eventbus.Bus, imag
 			deployments.DELETE(":name", api.deleteDeployment)
 		}
 
+		// Stacks API - Alias for deployments with preferred terminology
+		stacks := v1.Group("/stacks")
+		{
+			stacks.GET("", api.listDeployments)
+			stacks.POST("", api.createDeployment)
+			stacks.GET(":name", api.getDeployment)
+			stacks.PATCH(":name", api.patchDeployment)
+			stacks.DELETE(":name", api.deleteDeployment)
+		}
+
 		imagesGroup := v1.Group("/images")
 		{
 			imagesGroup.GET("", api.listImages)
