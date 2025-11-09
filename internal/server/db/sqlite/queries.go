@@ -390,7 +390,7 @@ func (r *imageRepository) Delete(ctx context.Context, name string) error {
 }
 
 func (r *vmGroupRepository) Create(ctx context.Context, group *db.VMGroup) (int64, error) {
-	res, err := r.exec.ExecContext(ctx, `INSERT INTO vm_groups (name, config_json, replicas) VALUES (?, ?, ?);`, group.Name, string(group.ConfigJSON), group.Replicas)
+	res, err := r.exec.ExecContext(ctx, `INSERT INTO stacks (name, config_json, replicas) VALUES (?, ?, ?);`, group.Name, string(group.ConfigJSON), group.Replicas)
 	if err != nil {
 		return 0, fmt.Errorf("insert vm group: %w", err)
 	}
@@ -402,28 +402,28 @@ func (r *vmGroupRepository) Create(ctx context.Context, group *db.VMGroup) (int6
 }
 
 func (r *vmGroupRepository) Update(ctx context.Context, id int64, configJSON []byte, replicas int) error {
-	if _, err := r.exec.ExecContext(ctx, `UPDATE vm_groups SET config_json = ?, replicas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`, string(configJSON), replicas, id); err != nil {
+	if _, err := r.exec.ExecContext(ctx, `UPDATE stacks SET config_json = ?, replicas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`, string(configJSON), replicas, id); err != nil {
 		return fmt.Errorf("update vm group: %w", err)
 	}
 	return nil
 }
 
 func (r *vmGroupRepository) UpdateReplicas(ctx context.Context, id int64, replicas int) error {
-	if _, err := r.exec.ExecContext(ctx, `UPDATE vm_groups SET replicas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`, replicas, id); err != nil {
+	if _, err := r.exec.ExecContext(ctx, `UPDATE stacks SET replicas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`, replicas, id); err != nil {
 		return fmt.Errorf("update vm group replicas: %w", err)
 	}
 	return nil
 }
 
 func (r *vmGroupRepository) Delete(ctx context.Context, id int64) error {
-	if _, err := r.exec.ExecContext(ctx, `DELETE FROM vm_groups WHERE id = ?;`, id); err != nil {
+	if _, err := r.exec.ExecContext(ctx, `DELETE FROM stacks WHERE id = ?;`, id); err != nil {
 		return fmt.Errorf("delete vm group: %w", err)
 	}
 	return nil
 }
 
 func (r *vmGroupRepository) GetByName(ctx context.Context, name string) (*db.VMGroup, error) {
-	row := r.exec.QueryRowContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM vm_groups WHERE name = ?;`, name)
+	row := r.exec.QueryRowContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM stacks WHERE name = ?;`, name)
 	group, err := scanVMGroup(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -435,7 +435,7 @@ func (r *vmGroupRepository) GetByName(ctx context.Context, name string) (*db.VMG
 }
 
 func (r *vmGroupRepository) GetByID(ctx context.Context, id int64) (*db.VMGroup, error) {
-	row := r.exec.QueryRowContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM vm_groups WHERE id = ?;`, id)
+	row := r.exec.QueryRowContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM stacks WHERE id = ?;`, id)
 	group, err := scanVMGroup(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -447,7 +447,7 @@ func (r *vmGroupRepository) GetByID(ctx context.Context, id int64) (*db.VMGroup,
 }
 
 func (r *vmGroupRepository) List(ctx context.Context) ([]db.VMGroup, error) {
-	rows, err := r.exec.QueryContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM vm_groups ORDER BY name ASC;`)
+	rows, err := r.exec.QueryContext(ctx, `SELECT id, name, config_json, replicas, created_at, updated_at FROM stacks ORDER BY name ASC;`)
 	if err != nil {
 		return nil, fmt.Errorf("list vm groups: %w", err)
 	}

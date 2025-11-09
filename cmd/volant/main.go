@@ -39,6 +39,7 @@ Run 'volant COMMAND --help' for more information on a command.`,
 
 	// Add the new commands
 	rootCmd.AddCommand(newBuildCommand())
+	rootCmd.AddCommand(newRunCommand())
 	rootCmd.AddCommand(newStackCommand())
 	rootCmd.AddCommand(newMigrateCommand())
 	rootCmd.AddCommand(newDaemonCommand())
@@ -48,7 +49,7 @@ Run 'volant COMMAND --help' for more information on a command.`,
 	if len(os.Args) > 1 {
 		// Check if it's one of our new commands
 		switch os.Args[1] {
-		case "build", "stack", "migrate", "daemon":
+		case "build", "run", "stack", "migrate", "daemon":
 			// Execute our new root command
 			if err := rootCmd.Execute(); err != nil {
 				fmt.Fprintf(os.Stderr, "command error: %v\n", err)
