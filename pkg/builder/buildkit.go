@@ -328,7 +328,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("create controller: %w", err)
 	}
 
@@ -355,7 +354,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		controller.Close()
 		historyDB.Close()
 		cacheStorage.Close()
-		metadataStore.Close()
 		wc.Close()
 		return nil, nil, fmt.Errorf("create client: %w", err)
 	}
@@ -378,7 +376,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		}
 		historyDB.Close()
 		cacheStorage.Close()
-		metadataStore.Close()
 		wc.Close()
 	}
 
