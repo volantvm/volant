@@ -1,9 +1,39 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Volant Build System
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Volant is a unified single-binary VM platform with the following components:
+#
+# Core Binaries:
+#   • volant      - CLI with embedded BuildKit builder (NO Docker daemon!)
+#   • volantd     - Control plane server/daemon
+#   • kestrel     - In-VM guest agent
+#   • driftd      - Network control daemon with eBPF
+#
+# The volant CLI includes a native builder that requires (Linux only):
+#   • skopeo      - OCI image manipulation
+#   • umoci       - OCI layer unpacking
+#   • mksquashfs  - Squashfs compression
+#
+# Quick start:
+#   make build              - Build all core binaries
+#   make show-info          - Show build environment
+#   make check-builder-deps - Check native builder dependencies
+#   make install            - Install binaries to /usr/local/bin
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 GO ?= go
 INSTALL_DIR ?= /usr/local/bin
 SYSTEMD_DIR ?= /etc/systemd/system
 BIN_DIR ?= bin
 CLANG ?= clang
 LLVM_STRIP ?= llvm-strip
+
+# Volant native builder dependencies (Linux only)
+SKOPEO ?= skopeo
+UMOCI ?= umoci
+MKSQUASHFS ?= mksquashfs
 
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
@@ -38,6 +68,9 @@ BPF_CINCLUDES += -I$(BPF_DIR)
 .PHONY: help
 help: ## Show available make targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*##"} {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: all
+all: build ## Build all core binaries (alias for 'build')
 
 .PHONY: build
 build: build-server build-agent build-cli build-drift ## Build all core binaries into $(BIN_DIR)
@@ -82,7 +115,7 @@ build-agent: ## Build the kestrel agent binary
 	$(GO) build -o $(BIN_DIR)/kestrel ./cmd/kestrel
 
 .PHONY: build-cli
-build-cli: ## Build the volant CLI binary
+build-cli: ## Build the volant CLI binary (includes embedded BuildKit builder)
 	mkdir -p $(BIN_DIR)
 	$(GO) build -o $(BIN_DIR)/volant ./cmd/volant
 
@@ -109,6 +142,45 @@ build-openapi-export: ## Build the openapi-export utility
 .PHONY: openapi-export
 openapi-export: build-openapi-export ## Generate OpenAPI JSON to docs/6_reference/api/openapi.json
 \t$(BIN_DIR)/openapi-export -server https://docs.volantvm.com -output docs/6_reference/api/openapi.json
+
+.PHONY: check-builder-deps
+check-builder-deps: ## Check if native builder dependencies are installed (Linux only)
+ifeq ($(UNAME_S),Linux)
+	@echo "Checking native builder dependencies..."
+	@command -v $(SKOPEO) >/dev/null 2>&1 && echo "✓ skopeo found" || echo "✗ skopeo not found (install: apt install skopeo)"
+	@command -v $(UMOCI) >/dev/null 2>&1 && echo "✓ umoci found" || echo "✗ umoci not found (install from: github.com/opencontainers/umoci)"
+	@command -v $(MKSQUASHFS) >/dev/null 2>&1 && echo "✓ mksquashfs found" || echo "✗ mksquashfs not found (install: apt install squashfs-tools)"
+	@echo ""
+	@echo "Native builder requires: skopeo, umoci, mksquashfs"
+	@echo "See PHASE2_NATIVE_BUILDER.md for installation instructions"
+else
+	@echo "Native builder is only available on Linux (current: $(UNAME_S))"
+	@echo "The volant CLI will build successfully but 'volant build' will show an error"
+endif
+
+.PHONY: show-info
+show-info: ## Show build environment information
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔧 Volant Build Environment"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Platform:     $(UNAME_S)"
+	@echo "Architecture: $(UNAME_M)"
+	@echo "Go:           $$($(GO) version)"
+	@echo "Install dir:  $(INSTALL_DIR)"
+	@echo "Binary dir:   $(BIN_DIR)"
+	@echo ""
+	@echo "Native Builder (Linux only):"
+ifeq ($(UNAME_S),Linux)
+	@echo "  Status:     Available"
+	@echo "  Skopeo:     $$(command -v $(SKOPEO) >/dev/null 2>&1 && echo 'installed' || echo 'NOT INSTALLED')"
+	@echo "  Umoci:      $$(command -v $(UMOCI) >/dev/null 2>&1 && echo 'installed' || echo 'NOT INSTALLED')"
+	@echo "  Mksquashfs: $$(command -v $(MKSQUASHFS) >/dev/null 2>&1 && echo 'installed' || echo 'NOT INSTALLED')"
+else
+	@echo "  Status:     Not available (requires Linux)"
+endif
+	@echo ""
+	@echo "Run 'make check-builder-deps' to verify builder dependencies"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 .PHONY: install
 install: build build-drift ## Install core binaries and drift into INSTALL_DIR (default: /usr/local/bin)
@@ -150,6 +222,28 @@ tidy: ## Sync go.mod
 	$(GO) mod tidy
 
 .PHONY: clean
-clean: ## Remove build artifacts
+clean: ## Remove build artifacts (binaries and BPF objects)
 	rm -rf $(BIN_DIR)
-	rm -rf $(dir $(BPF_OBJ))
+	rm -f $(BPF_INGRESS_OBJ) $(BPF_EGRESS_OBJ)
+	rm -f $(VMLINUX_H)
+	@echo "✓ Build artifacts cleaned"
+	@echo "Note: Native builder cache is preserved (see 'make clean-builder-cache')"
+
+.PHONY: clean-builder-cache
+clean-builder-cache: ## Remove native builder cache (BuildKit state)
+	@echo "Removing native builder cache..."
+	@if [ -n "$${VOLANT_BUILDKIT_STATE_DIR}" ] && [ -d "$${VOLANT_BUILDKIT_STATE_DIR}" ]; then \
+		rm -rf "$${VOLANT_BUILDKIT_STATE_DIR}"; \
+		echo "✓ Removed cache from: $${VOLANT_BUILDKIT_STATE_DIR}"; \
+	elif [ -d "$${XDG_CACHE_HOME:-$$HOME/.cache}/volant/buildkit" ]; then \
+		rm -rf "$${XDG_CACHE_HOME:-$$HOME/.cache}/volant/buildkit"; \
+		echo "✓ Removed cache from: $${XDG_CACHE_HOME:-$$HOME/.cache}/volant/buildkit"; \
+	elif [ -d "/tmp/volant-buildkit" ]; then \
+		rm -rf /tmp/volant-buildkit; \
+		echo "✓ Removed cache from: /tmp/volant-buildkit"; \
+	else \
+		echo "No builder cache found"; \
+	fi
+
+.PHONY: clean-all
+clean-all: clean clean-builder-cache ## Remove all build artifacts and caches
