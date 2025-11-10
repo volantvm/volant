@@ -11,10 +11,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/cache/remotecache"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
@@ -28,7 +28,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
-	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"go.etcd.io/bbolt"
@@ -173,7 +172,6 @@ func (b *EmbeddedBuildKit) trackBuildProgress(statusCh <-chan *bkclient.SolveSta
 
 			// Vertex completed
 			if v.Completed != nil && v.Started != nil {
-				duration := v.Completed.Sub(*v.Started)
 				if v.Error != "" {
 					b.reporter.FailStage(v.Name, fmt.Errorf("%s", v.Error))
 				}
@@ -220,22 +218,34 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 
 	// Setup worker
 	workerRoot := filepath.Join(b.stateDir, "worker")
-	registryHosts := resolver.NewRegistryConfig(nil)
+	if err := os.MkdirAll(workerRoot, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("create worker root: %w", err)
+	}
+
+	// Create metadata store
+	metadataPath := filepath.Join(workerRoot, "metadata.db")
+	metadataDB, err := bbolt.Open(metadataPath, 0o600, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open metadata db: %w", err)
+	}
+	metadataStore := metadata.NewStore(metadataDB)
 
 	wk, err := base.NewWorker(ctx, base.WorkerOpt{
 		ID:            "volant-builder",
-		MetadataStore: filepath.Join(workerRoot, "metadata"),
+		MetadataStore: metadataStore,
 		Executor:      nil, // Will use default executor
 		Platforms:     nil, // Auto-detect
 		GCPolicy:      nil, // Default GC policy
 	})
 	if err != nil {
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("create worker: %w", err)
 	}
 
 	wc := &worker.Controller{}
 	if err := wc.Add(wk); err != nil {
 		wk.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("add worker: %w", err)
 	}
 
@@ -244,6 +254,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	cacheStorage, err := bboltcachestorage.NewStore(cachePath)
 	if err != nil {
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("cache store: %w", err)
 	}
 
@@ -253,6 +264,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	if err != nil {
 		cacheStorage.Close()
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("history db: %w", err)
 	}
 
@@ -261,6 +273,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("get default worker: %w", err)
 	}
 
@@ -269,6 +282,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("content store unavailable")
 	}
 
@@ -277,6 +291,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("lease manager unavailable")
 	}
 
@@ -318,6 +333,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
+		metadataDB.Close()
 		return nil, nil, fmt.Errorf("create controller: %w", err)
 	}
 
@@ -344,6 +360,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		controller.Close()
 		historyDB.Close()
 		cacheStorage.Close()
+		metadataDB.Close()
 		wc.Close()
 		return nil, nil, fmt.Errorf("create client: %w", err)
 	}
@@ -366,6 +383,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		}
 		historyDB.Close()
 		cacheStorage.Close()
+		metadataDB.Close()
 		wc.Close()
 	}
 
