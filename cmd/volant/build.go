@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/volantvm/volant/internal/cli/client"
 	"github.com/volantvm/volant/internal/config"
 	"github.com/volantvm/volant/internal/imagespec"
+	"github.com/volantvm/volant/pkg/builder"
 	"github.com/volantvm/volant/pkg/fsdetect"
 )
 
@@ -143,17 +143,45 @@ func detectStrategy(buildFile string) (string, error) {
 }
 
 func buildFromDockerfile(ctx context.Context, dockerfile string, opts buildOptions) error {
-	fmt.Printf("Building from Dockerfile: %s\n", dockerfile)
-
-	// For now, delegate to fledge if available
-	// TODO: Integrate fledge libraries directly
-	if _, err := exec.LookPath("fledge"); err == nil {
-		return delegateToFledge(dockerfile, opts)
+	// Parse tag into name:version
+	name, version := parseImageTag(opts.Tag)
+	if opts.Tag == "" {
+		// Generate default tag from context directory
+		name = filepath.Base(opts.Context)
+		if name == "." || name == "/" {
+			name = "myapp"
+		}
+		version = "latest"
 	}
 
-	// Fallback message
-	fmt.Println("Note: Fledge integration pending. Please use 'fledge build' directly for now.")
-	return nil
+	// Determine output path
+	outputPath := opts.Output
+	if outputPath == "" {
+		outputPath = fmt.Sprintf("%s-%s.squashfs", name, version)
+	}
+
+	// Use native builder - NO Docker daemon required!
+	nb := builder.NewNativeBuilder("")
+
+	buildOpts := builder.BuildOptions{
+		Dockerfile:   dockerfile,
+		Context:      opts.Context,
+		Target:       "",
+		BuildArgs:    opts.BuildArgs,
+		OutputPath:   outputPath,
+		ImageName:    name,
+		ImageVersion: version,
+		Reporter:     builder.NewConsoleReporter(os.Stdout),
+	}
+
+	// Build with spectacular UX!
+	result, err := nb.Build(ctx, buildOpts)
+	if err != nil {
+		return fmt.Errorf("build failed: %w", err)
+	}
+
+	// Auto-install to volantd registry
+	return autoInstallImage("http://127.0.0.1:7777", result.SquashfsPath, fmt.Sprintf("%s:%s", name, version))
 }
 
 func buildFromVolantfile(ctx context.Context, volantfilePath string, opts buildOptions) error {
@@ -167,61 +195,68 @@ func buildFromVolantfile(ctx context.Context, volantfilePath string, opts buildO
 
 	fmt.Printf("✓ Loaded Volantfile for image: %s:%s\n", vf.Image.Name, vf.Image.Version)
 	fmt.Printf("  Strategy: %s\n", vf.Build.Strategy)
-	fmt.Printf("  CPU: %d cores, Memory: %dMB\n", vf.Runtime.CPUCores, vf.Runtime.MemoryMB)
+	fmt.Printf("  CPU: %d cores, Memory: %dMB\n\n", vf.Runtime.CPUCores, vf.Runtime.MemoryMB)
 
-	// For now, delegate to fledge if available by creating temporary legacy files
-	if _, err := exec.LookPath("fledge"); err == nil {
-		// Create temporary legacy config files
-		tmpDir := "/tmp/volant-build"
-		os.MkdirAll(tmpDir, 0755)
-
-		fledgePath := filepath.Join(tmpDir, "fledge.toml")
-		manifestPath := filepath.Join(tmpDir, "manifest.toml")
-
-		if err := vf.SaveAsLegacy(fledgePath, manifestPath); err != nil {
-			return fmt.Errorf("failed to create legacy config: %w", err)
-		}
-
-		fmt.Println("✓ Converting to legacy format for fledge compatibility")
-		return delegateToFledge(fledgePath, opts)
+	// Only support dockerfile strategy for now
+	if vf.Build.Strategy != "dockerfile" {
+		return fmt.Errorf("unsupported build strategy: %s (only 'dockerfile' is currently supported)", vf.Build.Strategy)
 	}
 
-	// Fallback message
-	fmt.Println("Note: Full Volantfile support pending. Please use 'fledge build' directly for now.")
-	return nil
-}
-
-func delegateToFledge(buildFile string, opts buildOptions) error {
-	// Build fledge command
-	args := []string{"build", "-c", buildFile}
-
-	if opts.Output != "" {
-		args = append(args, "-o", opts.Output)
+	// Resolve paths relative to Volantfile directory
+	volantfileDir := filepath.Dir(volantfilePath)
+	dockerfilePath := vf.Build.Dockerfile
+	if dockerfilePath == "" {
+		dockerfilePath = "Dockerfile"
+	}
+	if !filepath.IsAbs(dockerfilePath) {
+		dockerfilePath = filepath.Join(volantfileDir, dockerfilePath)
 	}
 
-	// Add build arguments
-	for key, value := range opts.BuildArgs {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+	contextPath := vf.Build.Context
+	if contextPath == "" {
+		contextPath = volantfileDir
+	}
+	if !filepath.IsAbs(contextPath) {
+		contextPath = filepath.Join(volantfileDir, contextPath)
 	}
 
-	// Execute fledge
-	cmd := exec.Command("fledge", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("fledge build failed: %w", err)
+	// Determine output path
+	outputPath := opts.Output
+	if outputPath == "" {
+		outputPath = fmt.Sprintf("%s-%s.squashfs", vf.Image.Name, vf.Image.Version)
 	}
 
-	fmt.Println("✓ Image built successfully")
-
-	// Auto-install if tag provided
-	if opts.Tag != "" {
-		return autoInstallImage("http://127.0.0.1:7777", opts.Output, opts.Tag)
+	// Merge build args (CLI args override Volantfile)
+	buildArgs := make(map[string]string)
+	for k, v := range vf.Build.Args {
+		buildArgs[k] = v
+	}
+	for k, v := range opts.BuildArgs {
+		buildArgs[k] = v // CLI takes precedence
 	}
 
-	return nil
+	// Use native builder with Volantfile configuration
+	nb := builder.NewNativeBuilder("")
+
+	buildOpts := builder.BuildOptions{
+		Dockerfile:   dockerfilePath,
+		Context:      contextPath,
+		Target:       vf.Build.Target,
+		BuildArgs:    buildArgs,
+		OutputPath:   outputPath,
+		ImageName:    vf.Image.Name,
+		ImageVersion: vf.Image.Version,
+		Reporter:     builder.NewConsoleReporter(os.Stdout),
+	}
+
+	// Build with spectacular UX!
+	result, err := nb.Build(ctx, buildOpts)
+	if err != nil {
+		return fmt.Errorf("build failed: %w", err)
+	}
+
+	// Auto-install to volantd registry
+	return autoInstallImage("http://127.0.0.1:7777", result.SquashfsPath, fmt.Sprintf("%s:%s", vf.Image.Name, vf.Image.Version))
 }
 
 func autoInstallImage(apiURL, imagePath, tag string) error {
