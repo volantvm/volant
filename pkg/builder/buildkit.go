@@ -224,11 +224,10 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 
 	// Create metadata store
 	metadataPath := filepath.Join(workerRoot, "metadata.db")
-	metadataDB, err := bbolt.Open(metadataPath, 0o600, nil)
+	metadataStore, err := metadata.NewStore(metadataPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open metadata db: %w", err)
+		return nil, nil, fmt.Errorf("create metadata store: %w", err)
 	}
-	metadataStore := metadata.NewStore(metadataDB)
 
 	wk, err := base.NewWorker(ctx, base.WorkerOpt{
 		ID:            "volant-builder",
@@ -238,14 +237,14 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		GCPolicy:      nil, // Default GC policy
 	})
 	if err != nil {
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("create worker: %w", err)
 	}
 
 	wc := &worker.Controller{}
 	if err := wc.Add(wk); err != nil {
 		wk.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("add worker: %w", err)
 	}
 
@@ -254,7 +253,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	cacheStorage, err := bboltcachestorage.NewStore(cachePath)
 	if err != nil {
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("cache store: %w", err)
 	}
 
@@ -264,7 +263,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	if err != nil {
 		cacheStorage.Close()
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("history db: %w", err)
 	}
 
@@ -273,7 +272,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("get default worker: %w", err)
 	}
 
@@ -282,7 +281,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("content store unavailable")
 	}
 
@@ -291,7 +290,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("lease manager unavailable")
 	}
 
@@ -333,7 +332,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		return nil, nil, fmt.Errorf("create controller: %w", err)
 	}
 
@@ -360,7 +359,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		controller.Close()
 		historyDB.Close()
 		cacheStorage.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		wc.Close()
 		return nil, nil, fmt.Errorf("create client: %w", err)
 	}
@@ -383,7 +382,7 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		}
 		historyDB.Close()
 		cacheStorage.Close()
-		metadataDB.Close()
+		metadataStore.Close()
 		wc.Close()
 	}
 
