@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/cache/remotecache"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
@@ -28,8 +27,11 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
+	ociworker "github.com/moby/buildkit/worker/oci"
+	"github.com/opencontainers/go-digest"
 	"go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -216,35 +218,34 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		return nil, nil, fmt.Errorf("session manager: %w", err)
 	}
 
-	// Setup worker
+	// Setup OCI worker (provides snapshotter, content store, etc.)
 	workerRoot := filepath.Join(b.stateDir, "worker")
 	if err := os.MkdirAll(workerRoot, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("create worker root: %w", err)
 	}
 
-	// Create metadata store
-	metadataPath := filepath.Join(workerRoot, "metadata.db")
-	metadataStore, err := metadata.NewStore(metadataPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create metadata store: %w", err)
-	}
+	registryHosts := resolver.NewRegistryConfig(nil)
 
-	wk, err := base.NewWorker(ctx, base.WorkerOpt{
-		ID:            "volant-builder",
-		MetadataStore: metadataStore,
-		Executor:      nil, // Will use default executor
-		Platforms:     nil, // Auto-detect
-		GCPolicy:      nil, // Default GC policy
+	// Use OCI worker which provides all necessary components
+	wk, err := ociworker.NewWorker(ctx, ociworker.Opt{
+		WorkerOpt: base.WorkerOpt{
+			ID:            digest.FromString("volant-builder").String(),
+			Labels:        map[string]string{},
+			Platforms:     nil, // Auto-detect
+			GCPolicy:      nil, // Default GC policy
+		},
+		Root:          workerRoot,
+		SessionManager: sm,
+		DNS:           nil,  // Use system DNS
+		RegistryHosts: registryHosts,
 	})
 	if err != nil {
-		metadataStore.Close()
-		return nil, nil, fmt.Errorf("create worker: %w", err)
+		return nil, nil, fmt.Errorf("create oci worker: %w", err)
 	}
 
 	wc := &worker.Controller{}
 	if err := wc.Add(wk); err != nil {
 		wk.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("add worker: %w", err)
 	}
 
@@ -253,7 +254,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	cacheStorage, err := bboltcachestorage.NewStore(cachePath)
 	if err != nil {
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("cache store: %w", err)
 	}
 
@@ -263,7 +263,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 	if err != nil {
 		cacheStorage.Close()
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("history db: %w", err)
 	}
 
@@ -272,7 +271,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("get default worker: %w", err)
 	}
 
@@ -281,7 +279,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("content store unavailable")
 	}
 
@@ -290,7 +287,6 @@ func (b *EmbeddedBuildKit) newEmbeddedClient(ctx context.Context) (*bkclient.Cli
 		historyDB.Close()
 		cacheStorage.Close()
 		wc.Close()
-		metadataStore.Close()
 		return nil, nil, fmt.Errorf("lease manager unavailable")
 	}
 
