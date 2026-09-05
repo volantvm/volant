@@ -1,3 +1,15 @@
+
+---
+
+<p align="center">
+  <sub>Sponsored by heretic bot mitigation and anti-fraud</sub><br/>
+  <a href="https://heretic.tech">
+    <img src="https://raw.githubusercontent.com/heretic-hq/.github/refs/heads/main/heretic-gh.png" width="800" alt="Sponsored by Heretic" />
+  </a>
+</p>
+
+---
+
 <p align="center">
   <img src="banner.png" alt="VOLANT — The Intelligent Execution Cloud"/>
 </p>
